@@ -1,6 +1,7 @@
 # generated films and brand kits (they live on the server's /data volume)
 films/
 brands/
+proof/
 
 # secrets
 .env

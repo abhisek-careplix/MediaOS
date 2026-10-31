@@ -10,6 +10,9 @@ import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog
 import { renderQuick } from './lib/pipeline.mjs';
 import { writeScript, runDirector, writeBrand } from './lib/claude.mjs';
 import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, logout } from './lib/auth.mjs';
+import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
+import { LAYOUTS } from './public/js/deck-render.js';
+import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
 const PORT = +process.env.PORT || 5178;
@@ -193,6 +196,76 @@ async function api(req, res, url, user) {
     runDirector(job, { prompt: b.prompt, style: `${style.name} (styles/${style.slug})`, seconds: +b.seconds || 45, aspect: b.aspect, notes: b.notes, model: meta.model, brand })
       .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
     return send(res, 200, { id, meta });
+  }
+
+  // —— decks ——
+  if (parts[0] === 'decks') {
+    if (M === 'GET' && parts[1] === 'meta') return send(res, 200, { layouts: LAYOUTS, audiences: AUDIENCES });
+    if (M === 'POST' && parts[1] === 'outline') {
+      const b = await body(req);
+      if (limited(res, req, 'script', true)) return;
+      return send(res, 200, await writeOutline({ brief: b.brief, audience: b.audience, count: Math.min(16, Math.max(3, +b.count || 8)), brandId: b.brandId, model: b.model }));
+    }
+    if (M === 'POST' && !parts[1]) {
+      const b = await body(req);
+      let deck, cost = null;
+      if (b.sample) deck = { ...sampleDeck(), brandId: b.brandId || null };
+      else {
+        if (limited(res, req, 'script', true)) return;
+        const r = await writeDeck({ brief: b.brief, audience: b.audience, outline: b.outline, brandId: b.brandId, model: b.model });
+        deck = r.deck; cost = r.cost;
+      }
+      const id = `k-${stamp()}-${Math.random().toString(36).slice(2, 6)}`, dir = filmDir(id);
+      fs.mkdirSync(dir, { recursive: true });
+      deck = saveDeck(dir, deck);
+      const meta = { id, mode: 'deck', title: deck.title, audience: deck.audience, brandId: deck.brandId, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'draft' };
+      writeMeta(dir, meta);
+      return send(res, 200, { id, meta, deck, issues: checkDeck(deck), cost });
+    }
+    const id = parts[1], dir = filmDir(id);
+    if (!fs.existsSync(path.join(dir, 'deck.json'))) return send(res, 404, { error: 'no such deck' });
+    if (M === 'GET' && !parts[2]) { const deck = readDeck(dir); return send(res, 200, { meta: readMeta(dir), deck, issues: checkDeck(deck) }); }
+    if (M === 'PUT' && !parts[2]) {
+      const deck = saveDeck(dir, await body(req));
+      writeMeta(dir, { ...readMeta(dir), title: deck.title, brandId: deck.brandId, audience: deck.audience });
+      return send(res, 200, { deck, issues: checkDeck(deck) });
+    }
+    if (M === 'POST' && parts[2] === 'slides' && parts[4] === 'rewrite') {
+      if (limited(res, req, 'script', true)) return;
+      const b = await body(req);
+      return send(res, 200, await rewriteSlide({ deck: readDeck(dir), index: +parts[3], instruction: b.instruction, model: b.model }));
+    }
+    if (M === 'POST' && parts[2] === 'export') {
+      if (limited(res, req, 'render')) return;
+      const b = await body(req), deck = readDeck(dir), issues = checkDeck(deck);
+      const blocking = issues.filter(i => i.level === 'error');
+      if (blocking.length && !b.draft) return send(res, 409, { error: `${blocking.length} check${blocking.length > 1 ? 's' : ''} failed. Fix them, or export a draft.`, issues });
+      const files = await exportDeck(dir, deck, b.kinds?.length ? b.kinds : ['pptx', 'pdf'], { draft: !!blocking.length });
+      writeMeta(dir, { ...readMeta(dir), status: 'done', output: files.pptx || files.pdf, files, draft: !!blocking.length, exported: new Date().toISOString() });
+      return send(res, 200, { files, draft: !!blocking.length });
+    }
+    if (M === 'POST' && parts[2] === 'video') {
+      const b = await body(req), deck = readDeck(dir), template = TEMPLATES[b.template] ? b.template : 'keynote';
+      const script = deckToScript(deck, template);
+      const film = createQuickFilm({ template, aspect: b.aspect === '9:16' ? '9:16' : '16:9', prompt: `From the deck "${deck.title}"`, voice: b.voice, narration: b.narration !== false, model: null, brandId: deck.brandId, owner: user });
+      const content = saveContent(film.dir, script, template, deck.brandId ? (await brandIntoFilm(deck.brandId, film.dir)).page : null);
+      return send(res, 200, { id: film.id, title: content.title });
+    }
+  }
+
+  // —— proof library ——
+  if (parts[0] === 'proof') {
+    const who = user.email;
+    if (M === 'GET' && !parts[1]) return send(res, 200, listProof());
+    if (M === 'GET' && parts[1] === 'pubmed') {
+      const q = String(url.searchParams.get('q') || '').trim();
+      if (!q) return send(res, 400, { error: 'Search for something.' });
+      return send(res, 200, await searchPubMed(q));
+    }
+    if (M === 'POST' && parts[1] === 'import') return send(res, 200, importCSV((await body(req)).csv, who));
+    if (M === 'POST' && !parts[1]) return send(res, 200, addProof(await body(req), who));
+    if (M === 'PUT' && parts[1]) return send(res, 200, updateProof(parts[1], await body(req), who));
+    if (M === 'DELETE' && parts[1]) { deleteProof(parts[1]); return send(res, 200, { ok: true }); }
   }
 
   // —— brand kits ——

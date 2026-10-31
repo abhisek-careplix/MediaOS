@@ -5,8 +5,10 @@ import { mountStudio, showStudio } from './studio.js';
 import { mountGallery, showGallery } from './gallery.js';
 import { mountLibrary, showLibrary } from './library.js';
 import { mountBrands, showBrands, loadBrands } from './brands.js';
+import { mountProof, showProof } from './proof.js';
+import { mountDecks, showDecks } from './decks.js';
 
-const VIEWS = { create: showCreate, studio: showStudio, gallery: showGallery, library: showLibrary, brands: showBrands };
+const VIEWS = { create: showCreate, studio: showStudio, gallery: showGallery, library: showLibrary, brands: showBrands, proof: showProof, decks: showDecks };
 
 async function boot() {
   $$('[data-icon]').forEach(s => s.replaceWith(icon(s.dataset.icon, 18)));
@@ -22,6 +24,8 @@ async function boot() {
   mountGallery($('#view-gallery'));
   mountLibrary($('#view-library'));
   mountBrands($('#view-brands'));
+  mountProof($('#view-proof'));
+  mountDecks($('#view-decks'));
   window.addEventListener('hashchange', () => emit('route', parseRoute()));
   on('route', route);
   route(parseRoute());

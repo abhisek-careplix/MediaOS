@@ -36,11 +36,14 @@ RUN claude plugin marketplace add lemomo-ai/lemo-opuscar && claude plugin instal
 
 COPY --chown=app:app app /home/app/videogen/app
 WORKDIR /home/app/videogen
+# the app's own packages (PowerPoint export)
+RUN cd app && npm ci --omit=dev --no-audit --no-fund && rm -rf /home/app/.npm
 
 ENV HOST=0.0.0.0 \
     PORT=5178 \
     VIDEOGEN_FILMS=/data/films \
     VIDEOGEN_BRANDS=/data/brands \
+    VIDEOGEN_PROOF=/data/proof \
     RENDER_SLOTS=2
 VOLUME /data
 EXPOSE 5178

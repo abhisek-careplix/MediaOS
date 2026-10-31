@@ -56,9 +56,9 @@ have compute instances describe "$NAME" --zone "$ZONE" || gc compute instances c
 say "5/7  Packaging the app"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-( cd "$HERE" && COPYFILE_DISABLE=1 tar czf "$TMP/videogen.tgz" --exclude '.DS_Store' \
+( cd "$HERE" && COPYFILE_DISABLE=1 tar czf "$TMP/videogen.tgz" --exclude '.DS_Store' --exclude 'node_modules' \
     app Dockerfile docker-compose.yml Caddyfile .env.example .dockerignore README.md DEPLOY.md )
-echo "  $(du -h "$TMP/videogen.tgz" | cut -f1) (films and brand kits on this Mac are not uploaded)"
+echo "  $(du -h "$TMP/videogen.tgz" | cut -f1) (films, decks, brand kits and proof on this Mac are not uploaded)"
 
 say "6/7  Uploading and starting (the first build takes a few minutes)"
 if [ -z "$DRY" ]; then

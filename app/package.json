@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Local prompt-to-film app on top of the Lemo-Opuscar library: quick template films in about a minute, or a full directed film with Claude.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.mjs"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
   }
 }

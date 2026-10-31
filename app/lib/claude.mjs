@@ -87,6 +87,25 @@ function runClaude(args, { cwd, timeout = 300000 } = {}) {
   });
 }
 
+// one structured-output call: returns the object matching schema, or throws with a readable reason
+export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 240000 } = {}) {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'videogen-'));
+  try {
+    const { out, err } = await runClaude(['-p', prompt, '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', model,
+      '--tools', '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'], { cwd, timeout });
+    let res;
+    try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 400)); }
+    if (res.is_error) {
+      const msg = String(res.result || res.subtype || 'error');
+      throw new Error(/log ?in/i.test(msg) ? 'Claude Code is not logged in. Run `claude auth login` (or set ANTHROPIC_API_KEY), then try again.' : msg);
+    }
+    let obj = res.structured_output;
+    if (!obj && typeof res.result === 'string') { const m = res.result.match(/\{[\s\S]*\}/); if (m) obj = JSON.parse(m[0]); }
+    if (!obj) throw new Error('Claude did not return the expected structure');
+    return { data: obj, cost: res.total_cost_usd, ms: res.duration_ms };
+  } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+}
+
 export async function writeScript({ prompt, template, seconds = 30, aspect = '16:9', narration = true, model = 'sonnet', brand = null }) {
   const tpl = TEMPLATES[template];
   if (!tpl) throw new Error('unknown template ' + template);
