@@ -1,0 +1,13 @@
+{
+  "title": "The Quiet Commute",
+  "accent": "#FF5A00",
+  "bpm": 112,
+  "scenes": [
+    { "type": "title", "kicker": "A short film", "text": "The quiet commute", "sub": "How e-bikes are changing the way cities move", "narration": "Every morning, millions of people choose a quieter way to get to work." },
+    { "type": "statement", "kicker": "The shift", "text": "Cities are trading lanes for bikes", "sub": "Paris added over a thousand kilometres of bike lanes in five years.", "narration": "Cities are trading car lanes for bike lanes, and riders are showing up." },
+    { "type": "number", "kicker": "Growth", "number": "240%", "unit": "more trips", "text": "E-bike trips in Paris since 2019", "narration": "In Paris, e-bike trips have grown by two hundred and forty percent." },
+    { "type": "list", "kicker": "Why it works", "text": "Three reasons riders stay", "items": ["Faster than traffic", "Cheaper than a car", "No sweat, no parking"], "narration": "Riders stay for three reasons: it is faster, it is cheaper, and there is no parking to find." },
+    { "type": "compare", "kicker": "Cost per year", "text": "What a commute costs", "left": { "label": "Car", "value": "$9,800" }, "right": { "label": "E-bike", "value": "$450" }, "narration": "A car costs nearly ten thousand dollars a year. An e-bike, about four hundred and fifty." },
+    { "type": "end", "kicker": "The quiet commute", "text": "Ride the change", "narration": "The quietest commute might also be the smartest." }
+  ]
+}

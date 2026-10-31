@@ -1,0 +1,33 @@
+# VideoGen behind Caddy, which gets and renews the HTTPS certificate for DOMAIN automatically.
+#   cp .env.example .env   # fill it in
+#   docker compose up -d --build
+services:
+  videogen:
+    build: .
+    env_file: .env
+    volumes:
+      - videogen-data:/data
+    expose:
+      - "5178"
+    restart: unless-stopped
+    shm_size: "1gb"   # headless Chromium needs more than Docker's 64 MB default
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - videogen
+    restart: unless-stopped
+
+volumes:
+  videogen-data:
+  caddy-data:
+  caddy-config:

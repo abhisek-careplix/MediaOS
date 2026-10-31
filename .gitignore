@@ -1,0 +1,12 @@
+# generated films and brand kits (they live on the server's /data volume)
+films/
+brands/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+node_modules/
+.DS_Store
+*.log

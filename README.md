@@ -1,0 +1,78 @@
+# VideoGen
+
+A local web app that turns a prompt into a short film made entirely in code, on top of the
+[Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar) library (installed at `~/lemo-opuscar`).
+
+```sh
+node app/server.mjs        # then open http://localhost:5178
+```
+
+## Two modes
+
+| | Quick film | Director |
+|---|---|---|
+| What happens | Claude writes a scene script (one structured call); a ready-made style template draws it | Claude runs the full `lemo-opuscar` skill headless: treatment, custom drawing code, voice, score, mix, self-check |
+| Styles | Swiss Motion Graphics, Dark Tech Keynote | any of the library's 66 styles |
+| Preview | plays in the browser as soon as the script exists (about 6–30 s depending on the model) | none; watch the live log |
+| Final MP4 | about 1 s of rendering per second of film (a 35 s film took 31 s) | 30–60 min, many tokens |
+| Output | `films/q-…/<title>.mp4` + `.srt` | `films/d-…/final.mp4` |
+
+Quick films can be edited after generation (text, numbers, narration, accent colour, tempo) and re-rendered.
+**Load the sample script** works without Claude, for trying the pipeline.
+
+## The studio
+
+| Section | What it does |
+|---|---|
+| **Create** | Prompt composer with idea starters and live template teasers → script → an editor with the film in a viewer, a scene timeline with real thumbnails and narration chunks, and an inspector. Edits re-render the preview in about a second. **Export** (⌘E) opens a progress sheet that turns into the finished film. Space plays, ←/→ jumps scenes. |
+| **Studio** | Director productions. The board reads Claude's live activity and infers the stage (Brief → Treatment → Look → Voice → Score → Animate → Render → Mix → Review → Deliver), shows the frames Claude renders and reviews on a monitor and in dailies, opens its documents (TREATMENT.md, FACTS.md, CREDITS), and keeps its notes. Activity is saved to `log.jsonl`, so a board replays after a restart. |
+| **Styles** | The instant templates and all library styles: real frames, demos that play on hover, a detail sheet, and a one-click start in either mode. Rebuild the data with `node app/scripts/build-gallery.mjs`. |
+| **Brands** | Brand kits: five colour roles (background, surface, text, secondary, accent) with contrast checks, a display and a body face from 27 open-licence Google Fonts (fetched on first use with their OFL licence), a logo, a narrator and a tone. Start from one of the 10 theme-factory themes, describe a brand and let Claude design it (about 7 s), or pull the accent from your logo. The editor previews the kit live in both templates. Instant films are drawn in the kit; directed films get it in their brief, with the font and logo files copied into the project. Kits live in `brands/<id>/`. |
+| **Library** | Every film, with posters extracted on export. |
+
+Front-end code is in `app/public/js/` (one module per section) and `app/public/css/studio.css`.
+
+## Deploying
+
+To put it online now as an open site on Google Cloud (project careplix-labs): `./deploy/gcp-up.sh`. [DEPLOY.md](DEPLOY.md) covers that, a 2-minute tunnel from this Mac, and running it as a website for the team: a Docker image (`Dockerfile`), Caddy for HTTPS (`docker-compose.yml`, `Caddyfile`), Google sign-in limited to `@careplix.com` (`app/lib/auth.mjs`), and the settings in `.env.example`. Without those settings the app stays in local mode: localhost only, no sign-in.
+
+## Requirements
+
+- The `claude` CLI, **logged in**: run `claude` once in a terminal and use `/login` (or export `ANTHROPIC_API_KEY` before starting the server).
+- `~/lemo-opuscar` with its core and voice tiers (`setup.sh deps voice`), Node 20+, ffmpeg 7+.
+
+## How a quick film is built
+
+```
+prompt ──Claude──► content.json (scenes: title · statement · number · list · compare · end)
+                       │
+templates/<style>/scenes.js + shared/runtime.js  →  a page with render(t), DUR, EV (the library's page contract)
+                       │
+Kokoro TTS (per scene) → events.mjs → video.mjs (headless Chrome, 4 workers) → audio/mix.py (score + foley + voice, ducked)
+                       → mux.sh (−14 LUFS) → <title>.mp4 + .srt
+```
+
+- `app/server.mjs`: HTTP server and API (localhost only).
+- `app/lib/`: `claude.mjs` (script writing, director runs), `pipeline.mjs` (quick render), `jobs.mjs` (progress over SSE), `templates.mjs`.
+- `app/templates/`: the quick-mode styles. `shared/` holds the runtime, page and fonts (OFL); each style adds a `scenes.js`.
+- `app/audio/mix.py`: an original synthesized score per template, sound effects on the page's events, narration with ducking.
+
+## Adding a template
+
+Copy `app/templates/swiss/scenes.js`, give it a `LAYOUT` and `DRAW` entry for each scene type, register it in
+`app/lib/templates.mjs` (name, brief for Claude, accents), and add a score and foley map for it in `app/audio/mix.py`.
+Base the look on a library `styles/<slug>/STYLE.md`.
+
+## Settings (environment variables)
+
+| Variable | Default |
+|---|---|
+| `PORT` | `5178` |
+| `LEMO_OPUSCAR_HOME` | `~/lemo-opuscar` |
+| `VIDEOGEN_FILMS` | `./films` |
+| `DIRECTOR_PERMISSION_MODE` | `auto` (the permission mode Claude runs with in director mode) |
+| `CLAUDE_BIN` | `claude` |
+
+## Credits
+
+Built on [Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar) by LemoLab. Style frames are CC BY 4.0 (LemoLab), and fonts are OFL. See [THIRD_PARTY.md](THIRD_PARTY.md).

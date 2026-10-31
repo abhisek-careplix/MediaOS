@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>VideoGen Studio</title>
+<link rel="stylesheet" href="/css/studio.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><b>VideoGen</b><small>Studio</small></div>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#create" data-view="create"><span data-icon="sparkles"></span>Create</a>
+      <a href="#studio" data-view="studio"><span data-icon="clapper"></span>Studio<i class="live-dot" id="nav-live" hidden></i></a>
+      <a href="#gallery" data-view="gallery"><span data-icon="grid"></span>Styles</a>
+      <a href="#brands" data-view="brands"><span data-icon="palette"></span>Brands</a>
+      <a href="#library" data-view="library"><span data-icon="film"></span>Library</a>
+    </nav>
+    <div class="side-foot" id="setup"></div>
+  </aside>
+
+  <main class="content">
+    <section class="view" id="view-create" data-view="create"></section>
+    <section class="view" id="view-studio" data-view="studio" hidden></section>
+    <section class="view" id="view-gallery" data-view="gallery" hidden></section>
+    <section class="view" id="view-library" data-view="library" hidden></section>
+    <section class="view" id="view-brands" data-view="brands" hidden></section>
+  </main>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<div id="sheets"></div>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

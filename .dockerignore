@@ -1,0 +1,7 @@
+films
+brands
+.env
+.git
+.claude
+**/node_modules
+**/.DS_Store

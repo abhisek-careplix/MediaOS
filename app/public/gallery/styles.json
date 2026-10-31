@@ -1,0 +1,1158 @@
+{
+ "credit": "Style frames and demo films: LemoLab, CC BY 4.0",
+ "source": "https://github.com/lemomo-ai/lemo-opuscar",
+ "styles": [
+  {
+   "slug": "archive-lighttable",
+   "name": "Archive Light Table",
+   "category": "Evidence Films",
+   "film": "Two Seconds Short",
+   "line": "The telegram said 57 seconds; under a loupe, the Wrights' glass negatives and the archive say 59.",
+   "uses": [
+    "Brand history",
+    "Archive stories",
+    "Museums"
+   ],
+   "dur": 40,
+   "essence": "Real archive objects (glass negatives, slides, letters, telegrams, clippings, drawings) lie on a cool, backlit light table. A loupe comes down on one of them, and inside the glass the object comes alive: a negative turns positive, a line of type lights up, a number lifts off the page, a photograph opens into depth. Precise catalogue numbers, dates and readings are pinned to the objects. Clean, modern and quiet, with no vintage filter.",
+   "frame": "gallery/frames/archive-lighttable.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/archive-lighttable.mp4",
+   "instant": null
+  },
+  {
+   "slug": "art-deco",
+   "name": "Art Deco",
+   "category": "Graphic & Type",
+   "film": "Midnight at the Starlight Hotel",
+   "line": "A grand hotel, 1930: a bellboy races lifts and revolving doors to deliver one letter before midnight.",
+   "uses": [
+    "Luxury & hospitality",
+    "Galas",
+    "Invitations"
+   ],
+   "dur": 58.4,
+   "essence": "Black lacquer, engraved gold line and airbrushed geometry: a 1930s poster that moves. Every composition has a centre axis, transitions open or close along it, and light arrives as bulbs switching on one by one.",
+   "frame": "gallery/frames/art-deco.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/art-deco.mp4",
+   "instant": null
+  },
+  {
+   "slug": "ascii-crt",
+   "name": "ASCII / CRT Terminal",
+   "category": "Graphic & Type",
+   "film": "Tranquility.log",
+   "line": "A moon-base AI wakes after forty years to a signal from Earth, and replies by drawing “home” in characters.",
+   "uses": [
+    "Developer tools",
+    "Sci-fi",
+    "Tech brands"
+   ],
+   "dur": 59.8,
+   "essence": "Everything on screen is a real character on a monospace grid, lit by the phosphor of an old monochrome CRT.",
+   "frame": "gallery/frames/ascii-crt.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/ascii-crt.mp4",
+   "instant": null
+  },
+  {
+   "slug": "backrooms",
+   "name": "Liminal Found Footage",
+   "category": "Cinema & Eras",
+   "film": "Night Shift Orientation",
+   "line": "A new night-shift hire films their first night in an endless yellow office, following the rules on the wall.",
+   "uses": [
+    "Horror",
+    "Mystery & ARG",
+    "Game teasers"
+   ],
+   "dur": 59.7,
+   "essence": "Camcorder tapes recovered from empty, endless, fluorescent-lit spaces. Rules instead of monsters.",
+   "frame": "gallery/frames/backrooms.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/backrooms.mp4",
+   "instant": null
+  },
+  {
+   "slug": "blueprint",
+   "name": "Blueprint",
+   "category": "Graphic & Type",
+   "film": "Patent Pending: The Cloud Catcher",
+   "line": "An inventor's blueprint draws, explodes and assembles a cloud-catching machine, and its revision cloud starts to rain.",
+   "uses": [
+    "Engineering",
+    "Hardware launches",
+    "Tech explainers"
+   ],
+   "dur": 46.7,
+   "essence": "Engineering drawings that come alive on a sheet of cyanotype paper: white technical line work on Prussian blue, drawn in drafting order, with annotations that move.",
+   "frame": "gallery/frames/blueprint.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/blueprint.mp4",
+   "instant": null
+  },
+  {
+   "slug": "brick-toy",
+   "name": "Brick Toy",
+   "category": "Materials & 3D",
+   "film": "Rocket from Spare Parts",
+   "line": "A brick astronaut builds a rocket from spare parts and flies to a brick moon.",
+   "uses": [
+    "Toys & kids",
+    "Product builds",
+    "Space"
+   ],
+   "dur": 54,
+   "essence": "Stop-motion toy-brick films shot like macro photography on a real desk: a world built from interlocking plastic bricks with round studs, animated a pose at a time.",
+   "frame": "gallery/frames/brick-toy.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/brick-toy.mp4",
+   "instant": null
+  },
+  {
+   "slug": "briefing-board",
+   "name": "Engineering Briefing Board",
+   "category": "Evidence Films",
+   "film": "The Ship Decides",
+   "line": "Four bridge types are tested on one briefing wall, and the ship that must pass under picks the winner.",
+   "uses": [
+    "Engineering",
+    "Option comparisons",
+    "Briefings"
+   ],
+   "dur": 40,
+   "essence": "One real whiteboard wall, filmed: window light on enamel, ghosts of erased marker, frame and tray. Cut-out photographs of real things land on it with weight; tags, magnets, a ruler and stamps are pinned to it; marker ink draws itself in three colours with fixed meanings. The camera rides the lines from fact to fact and only at the end pulls back to show the whole briefing.",
+   "frame": "gallery/frames/briefing-board.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/briefing-board.mp4",
+   "instant": null
+  },
+  {
+   "slug": "caption-news",
+   "name": "Caption News",
+   "category": "Edit & Documentary",
+   "film": "The Bee Ledger",
+   "line": "America lost 1.3 million bee colonies, yet the count rose 6 %: a news short that works with the sound off.",
+   "uses": [
+    "Social news",
+    "Report explainers",
+    "Data shorts"
+   ],
+   "dur": 59.5,
+   "essence": "Social-video news that reads with the sound off. Real footage, photos and the source document are the ground; huge captions are the lead actor, slammed in a chunk at a time with one keyword on a yellow block. Hard cuts on a music grid, numbers that roll, a source tag that slides in whenever a figure appears, and the original document highlighted on screen before its number is believed. 16:9, built for a feed.",
+   "frame": "gallery/frames/caption-news.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/caption-news.mp4",
+   "instant": null
+  },
+  {
+   "slug": "cel-anime-80s",
+   "name": "80s Cel Anime",
+   "category": "Cartoon & Anime",
+   "film": "City Lights, 1987",
+   "line": "A courier girl rides through a rain-soaked neon city to deliver a tape before the dawn launch.",
+   "uses": [
+    "Music videos",
+    "Game trailers",
+    "Nostalgia"
+   ],
+   "dur": 59,
+   "essence": "Hand-painted cel animation from the golden age of Japanese OVAs, re-created in code: flat two-tone cels over airbrushed backgrounds, backlit neon, limited-animation timing, played back as a late-80s videotape on a CRT television.",
+   "frame": "gallery/frames/cel-anime-80s.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/cel-anime-80s.mp4",
+   "instant": null
+  },
+  {
+   "slug": "chalkboard",
+   "name": "Chalkboard",
+   "category": "Hand-drawn & Painting",
+   "film": "The Story of Chinese Characters",
+   "line": "Chalk writes a popular claim about two characters, wipes it, and traces 射 back three thousand years.",
+   "uses": [
+    "Word origins",
+    "Myth-busting",
+    "Lessons"
+   ],
+   "dur": 49.3,
+   "essence": "A real classroom blackboard on which chalk writes itself, stroke by stroke in true stroke order, with no hand, no chalk stick and no eraser in sight. One idea is taught the way a teacher does it: write what people think, wipe it with one pass, write what is true in the same place.",
+   "frame": "gallery/frames/chalkboard.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/chalkboard.mp4",
+   "instant": null
+  },
+  {
+   "slug": "circuit-board",
+   "name": "Circuit Board",
+   "category": "Information & Keynote",
+   "film": "Seven Milliseconds",
+   "line": "Rivers become copper traces as current runs 2,080 km from a dam to a phone charger.",
+   "uses": [
+    "Energy",
+    "Supply chains",
+    "Devices"
+   ],
+   "dur": 60,
+   "essence": "The subject is drawn as a printed circuit board seen from straight above: the world is copper under green solder mask, routes are traces, places are pads, words are white silkscreen, and what flows (power, water, signals, goods) is light running along the copper. The camera rides that light and jumps between the scale of a map and the scale of a single component.",
+   "frame": "gallery/frames/circuit-board.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/circuit-board.mp4",
+   "instant": null
+  },
+  {
+   "slug": "city-symphony",
+   "name": "Time-lapse Symphony",
+   "category": "Edit & Documentary",
+   "film": "One Day in New York",
+   "line": "One day in New York in time-lapse: rivers of light, a grid on the sixteenths, 1899 beside today.",
+   "uses": [
+    "City films",
+    "Music montages",
+    "Openers"
+   ],
+   "dur": 52,
+   "essence": "A city film cut like a piece of minimalist music: time-lapse turns traffic, crowds and clouds into rivers of light, the cuts get denser with the score's subdivisions, one thing is slowed almost to a stop, and the film ends on a hard cut to black on a downbeat. No narrator. The music carries it.",
+   "frame": "gallery/frames/city-symphony.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/city-symphony.mp4",
+   "instant": null
+  },
+  {
+   "slug": "countdown",
+   "name": "Live Countdown Split-screen",
+   "category": "Edit & Documentary",
+   "film": "Counting Itself Down",
+   "line": "The last minute of the Artemis II launch, uncut: one cell opens to nine, and they merge into one at ignition.",
+   "uses": [
+    "Launches",
+    "Countdowns",
+    "Live events"
+   ],
+   "dur": 59.5,
+   "essence": "An edit style, not a look. Real footage of one event with a known zero (a launch, a verdict, a final whistle, polls closing), shown in real time: screen time equals event time, a clock ticks every second, and the screen splits into more and more cells as the moment nears, every cell showing the same second. At zero the cells merge into one picture and the clock flips.",
+   "frame": "gallery/frames/countdown.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/countdown.mp4",
+   "instant": null
+  },
+  {
+   "slug": "crayon-book",
+   "name": "Crayon Picture Book",
+   "category": "Hand-drawn & Painting",
+   "film": "The Moon Can't Sleep",
+   "line": "The moon can't sleep, so a little girl climbs onto the roof to sing it a lullaby.",
+   "uses": [
+    "Picture books",
+    "Bedtime stories",
+    "Kids' learning"
+   ],
+   "dur": 52,
+   "essence": "A picture-book page drawn live in wax crayon on toothy paper, with a watercolour wash that reveals what the crayon was hiding.",
+   "frame": "gallery/frames/crayon-book.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/crayon-book.mp4",
+   "instant": null
+  },
+  {
+   "slug": "dark-keynote",
+   "name": "Dark Tech Keynote",
+   "category": "Information & Keynote",
+   "film": "Room to Think",
+   "line": "Launch film for Tidy, a fictional app: one buried cursor snaps hundreds of windows back into place.",
+   "uses": [
+    "Product launches",
+    "SaaS",
+    "Keynotes"
+   ],
+   "dur": 42,
+   "essence": "A software launch film where the interface itself is the star: near-black gradient, hairline grid, soft light, one brand accent, and UI that moves with snap-grid precision. Light reveals, one giant number, and a sound design that is as ordered as the pixels.",
+   "frame": "gallery/frames/dark-keynote.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/dark-keynote.mp4",
+   "instant": "keynote"
+  },
+  {
+   "slug": "data-physical",
+   "name": "Data Physicalization",
+   "category": "Evidence Films",
+   "film": "Two Spirals",
+   "line": "Twelve years of wind and solar stacked as real plates, spiralling round a walnut dial until solar overtakes.",
+   "uses": [
+    "Annual reports",
+    "Investor decks",
+    "Energy data"
+   ],
+   "dur": 39.4,
+   "essence": "Real statistics built as real objects: every unit is a countable piece of material (a plate, a block, a coin, a bar) stacked to exact scale on a crafted base, shot like a product in a studio — soft key, long shadows, shallow depth of field, physically based materials. The camera reads a number at the edge of one plate, follows the data as it grows, and pulls back until the chart is an installation.",
+   "frame": "gallery/frames/data-physical.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/data-physical.mp4",
+   "instant": null
+  },
+  {
+   "slug": "dataviz",
+   "name": "Data Storytelling",
+   "category": "Information & Keynote",
+   "film": "A Hundred Summers",
+   "line": "A hundred years of summer temperatures, where the chart itself tells the story.",
+   "uses": [
+    "Data journalism",
+    "Reports",
+    "Climate & science"
+   ],
+   "dur": 50,
+   "essence": "A chart that tells a story: real data, drawn mark by mark on cream paper by a red–blue pencil, with handwritten notes pinned to the numbers. The chart itself is the camera, the rhythm and the plot.",
+   "frame": "gallery/frames/dataviz.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/dataviz.mp4",
+   "instant": null
+  },
+  {
+   "slug": "desktop-flythrough",
+   "name": "Desktop Flythrough",
+   "category": "Materials & 3D",
+   "film": "Before the Ding",
+   "line": "A cat photo hops across app cards on a sunlit desk, from one phone to a friend's.",
+   "uses": [
+    "App explainers",
+    "Workflows",
+    "Products"
+   ],
+   "dur": 60,
+   "essence": "App screens and tools lie on a sunlit desk as printed paper cards; small pixel characters, popped up into voxel toys, carry the work from card to card, while one unbroken camera flies after them, whips between stops and finally pulls back over the whole desk.",
+   "frame": "gallery/frames/desktop-flythrough.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/desktop-flythrough.mp4",
+   "instant": null
+  },
+  {
+   "slug": "engraving",
+   "name": "Copperplate Engraving",
+   "category": "Print & Printmaking",
+   "film": "The Honeybee, Plate VII",
+   "line": "A natural-history plate engraves itself: the burin cuts the copper, the bee builds up line by line, and a watercolour wash brings it to life.",
+   "uses": [
+    "Museum labels",
+    "Science explainers",
+    "Brand heritage"
+   ],
+   "dur": 40,
+   "essence": "An intaglio plate that engraves itself: a burin cuts swelling lines into copper, a proof is pulled, and the figure builds up — outline, hatching, cross-hatching — until engraved lettering, magnified details and a hand-laid wash make a finished plate.",
+   "frame": "gallery/frames/engraving.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/engraving.mp4",
+   "instant": null
+  },
+  {
+   "slug": "game-show",
+   "name": "Game Show Flat",
+   "category": "Games",
+   "film": "Rhythm of AI, 1997 → 2026",
+   "line": "The history of AI as a rhythm game: models take the stage on the beat, and a report card closes the show.",
+   "uses": [
+    "Tech timelines",
+    "Year in review",
+    "Variety shows"
+   ],
+   "dur": 148.8,
+   "essence": "A rhythm-game variety show in flat vector: toy-like mascots with thick ink outlines on candy-coloured stripes and sunbursts, every hit landing on a fixed tempo grid, call-and-response patterns, and a judgement word when each round is won.",
+   "frame": "gallery/frames/game-show.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/game-show.mp4",
+   "instant": null
+  },
+  {
+   "slug": "glass-product",
+   "name": "Glass Product Render",
+   "category": "Materials & 3D",
+   "film": "Aura — Hear the Light",
+   "line": "Unboxing and close-ups of Aura, fictional glass earbuds, in strip-light sweeps and caustics.",
+   "uses": [
+    "Product launches",
+    "Consumer tech",
+    "Beauty"
+   ],
+   "dur": 32,
+   "essence": "Launch-film product rendering in transparent and frosted glass: a dark-field studio, strip-light sweeps, dispersion, caustics, light travelling inside the object, slow exploded views that snap shut on a downbeat.",
+   "frame": "gallery/frames/glass-product.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/glass-product.mp4",
+   "instant": null
+  },
+  {
+   "slug": "halftone-dossier",
+   "name": "Halftone Dossier",
+   "category": "Print & Printmaking",
+   "film": "Case File: Chubby",
+   "line": "A chubby orange cat stands trial for testing gravity and 4 a.m. parkour, and walks free.",
+   "uses": [
+    "Humour",
+    "Pet content",
+    "Social shorts"
+   ],
+   "dur": 30,
+   "essence": "A retro print case file: cream archive paper, overprinted halftone dots in a few flat inks, huge heavy headlines with misregistered shadows, rubber stamps that slam, and thick-outlined characters. The film is a file that is read out one exhibit at a time.",
+   "frame": "gallery/frames/halftone-dossier.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/halftone-dossier.mp4",
+   "instant": null
+  },
+  {
+   "slug": "hd-2d",
+   "name": "HD-2D",
+   "category": "Games",
+   "film": "The Lampbearer",
+   "line": "The lighthouse goes dark; a girl carries the last flame through a night forest and up the storm cliffs.",
+   "uses": [
+    "Game trailers",
+    "Fantasy",
+    "Story films"
+   ],
+   "dur": 76.5,
+   "essence": "Hand-made pixel sprites standing like paper cut-outs inside a lit, fogged, fully 3D diorama, shot from a high three-quarter angle through a tilt-shift lens: a toy world where every lamp throws a real shadow.",
+   "frame": "gallery/frames/hd-2d.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/hd-2d.mp4",
+   "instant": null
+  },
+  {
+   "slug": "hologram-hud",
+   "name": "Sci-fi Hologram HUD",
+   "category": "Information & Keynote",
+   "film": "Volt · Spec Scan",
+   "line": "An e-bike is scanned into a hologram; target boxes lock onto the battery, motor and brakes.",
+   "uses": [
+    "Spec walkthroughs",
+    "Launch videos",
+    "Trade shows"
+   ],
+   "dur": 39,
+   "essence": "An object is scanned into a glowing wireframe. Target boxes lock onto its parts; each opens in a local exploded view, a leader pulls out, and its number rolls from garbage glyphs into the real value. It may light up, once, into a solid hologram.",
+   "frame": "gallery/frames/hologram-hud.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/hologram-hud.mp4",
+   "instant": null
+  },
+  {
+   "slug": "impasto",
+   "name": "Impasto Oil Painting",
+   "category": "Hand-drawn & Painting",
+   "film": "The Colour of Rain",
+   "line": "In a grey, rainy square one red umbrella opens, and a waltz paints the whole plaza in colour.",
+   "uses": [
+    "Music videos",
+    "Art & culture",
+    "Emotional ads"
+   ],
+   "dur": 39.7,
+   "essence": "Thick oil paint laid with a palette knife: big, flat, sharp-edged planes of colour, raked by light so every ridge of paint shows. Clarity first: value structure before texture, hard edges at the focus, calm planes everywhere else.",
+   "frame": "gallery/frames/impasto.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/impasto.mp4",
+   "instant": null
+  },
+  {
+   "slug": "ink-wash",
+   "name": "Chinese Ink Wash",
+   "category": "Hand-drawn & Painting",
+   "film": "The Swordsman and the River",
+   "line": "A swordsman crosses the river on the water and splits the current with a single stroke.",
+   "uses": [
+    "Wuxia",
+    "Cultural brands",
+    "Poetry"
+   ],
+   "dur": 48,
+   "essence": "Xieyi ink painting on rice paper, animated: blank paper is space, one brushstroke is a mountain, a wave, a gesture or a cut.",
+   "frame": "gallery/frames/ink-wash.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/ink-wash.mp4",
+   "instant": null
+  },
+  {
+   "slug": "iso-infographic",
+   "name": "Isometric Infographic",
+   "category": "Information & Keynote",
+   "film": "From Bean to Cup",
+   "line": "A coffee's journey from the plantation to your hands, across one isometric world.",
+   "uses": [
+    "Process explainers",
+    "Supply chains",
+    "Annual reports"
+   ],
+   "dur": 58.8,
+   "essence": "A system diagram comes alive: an isometric diorama of flat three-tone blocks, thin ink labels and Isotype numbers, where things open up to show their insides and the numbers are drawn, not stated.",
+   "frame": "gallery/frames/iso-infographic.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/iso-infographic.mp4",
+   "instant": null
+  },
+  {
+   "slug": "isometric-picture-book",
+   "name": "Isometric Picture Book",
+   "category": "Information & Keynote",
+   "film": "Seventy-Two Seats",
+   "line": "Travellers board an isometric plane, and the order shows why one way is nearly twice as fast.",
+   "uses": [
+    "Everyday rules",
+    "Queues",
+    "Comparisons"
+   ],
+   "dur": 59.8,
+   "essence": "A calm explainer of an everyday rule, set in one real place drawn in true isometric with flat colour: small faceless people seen from behind do the thing in order, while serif type lands on the ground, character by character, as if painted there. Whatever hides the action (a roof, a wall) is cut away or lifts off like a paper flap. The order of movement is the explanation.",
+   "frame": "gallery/frames/isometric-picture-book.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/isometric-picture-book.mp4",
+   "instant": null
+  },
+  {
+   "slug": "kino-montage",
+   "name": "Constructivist Montage",
+   "category": "Edit & Documentary",
+   "film": "410 Days",
+   "line": "The Empire State's 1931 brochure credits its builders; the site film and Hine's photos answer: 2,500 a day.",
+   "uses": [
+    "Industry histories",
+    "Milestones",
+    "Collective effort"
+   ],
+   "dur": 60,
+   "essence": "Real archive footage, photographs and documents, printed as one ink-and-paper poster with a single red, and cut on a machine beat. Diagonal bands carry the type; windows cut along the axis hold the film; people are scissored out of photographs and stacked into structures; numbers count, documents are marked in red, and two images collide to make a third idea.",
+   "frame": "gallery/frames/kino-montage.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/kino-montage.mp4",
+   "instant": null
+  },
+  {
+   "slug": "lidar-survey",
+   "name": "LiDAR Survey",
+   "category": "Evidence Films",
+   "film": "The Fields Under the Forest",
+   "line": "A laser survey strips the canopy off a Connecticut forest and finds 3.4 km of old farm walls.",
+   "uses": [
+    "Heritage",
+    "Environment",
+    "Site surveys"
+   ],
+   "dur": 40,
+   "essence": "Real airborne laser points of a real place, floating in the dark as a measured cloud; a scan line or a cutting plane passes through them and the points condense into a solid, raking-lit surface, which is then measured with hairline instruments. One designed camera move carries the whole film: the cloud is something you fly through, not a picture you look at.",
+   "frame": "gallery/frames/lidar-survey.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/lidar-survey.mp4",
+   "instant": null
+  },
+  {
+   "slug": "living-screencast",
+   "name": "Living Screencast",
+   "category": "Information & Keynote",
+   "film": "Clawd Moves In",
+   "line": "Clawd hops out of the terminal into the Claude app and acts out plan mode and self-checks in one take.",
+   "uses": [
+    "Product tutorials",
+    "Feature launches",
+    "Onboarding"
+   ],
+   "dur": 59.4,
+   "essence": "A product walkthrough that looks like a real screen recording, where a low-resolution mascot lives inside a high-resolution interface and acts out what the software is doing.",
+   "frame": "gallery/frames/living-screencast.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/living-screencast.mp4",
+   "instant": null
+  },
+  {
+   "slug": "lowpoly-island",
+   "name": "Low-poly Isometric Island",
+   "category": "Materials & 3D",
+   "film": "The Island That Grew",
+   "line": "An island and its village grow tile by tile from an empty sea, each tile a note, into a starry night.",
+   "uses": [
+    "Game trailers",
+    "World building",
+    "Calm content"
+   ],
+   "dur": 53,
+   "essence": "A tiny faceted world seen through an orthographic isometric lens: everything is a geometric block, and everything that appears arrives with a bounce and a note.",
+   "frame": "gallery/frames/lowpoly-island.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/lowpoly-island.mp4",
+   "instant": null
+  },
+  {
+   "slug": "memphis-diorama",
+   "name": "Memphis Diorama",
+   "category": "Materials & 3D",
+   "film": "Four Seasons in Pomelo Town",
+   "line": "One river bend, four seasons, one take; each turns when the big tree squats and springs back.",
+   "uses": [
+    "Web heroes",
+    "Ambient loops",
+    "Seasons"
+   ],
+   "dur": 45,
+   "essence": "A place built as a tabletop model: on warm white paper an organic, grainy frame grows open, and inside it a small world in flat Memphis colours, ink outlines, hard purple shadows and tiny patterns, full of small motions under a slow camera. Calm, bright and warm; a place you watch, not a story you follow.",
+   "frame": "gallery/frames/memphis-diorama.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/memphis-diorama.mp4",
+   "instant": null
+  },
+  {
+   "slug": "microgame",
+   "name": "Microgame Frenzy",
+   "category": "Games",
+   "film": "Five-Second Astronaut",
+   "line": "A clumsy cadet survives a five-second boot camp, faster and faster, until the boss: landing home.",
+   "uses": [
+    "Game trailers",
+    "Onboarding",
+    "Social shorts"
+   ],
+   "dur": 59.8,
+   "essence": "A rapid-fire party-game film: one command word, a few seconds, one action. Every microgame is drawn in a completely different art style, and the film keeps getting faster.",
+   "frame": "gallery/frames/microgame.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/microgame.mp4",
+   "instant": null
+  },
+  {
+   "slug": "microscope",
+   "name": "Microscope Story",
+   "category": "Evidence Films",
+   "film": "Measured Blue",
+   "line": "One continuous move from a liver slide to a single nucleus; two circles, counted pixel by pixel, differ 2.4 times in blue.",
+   "uses": [
+    "Biomedicine",
+    "Materials science",
+    "Skincare science"
+   ],
+   "dur": 39.5,
+   "essence": "Real, licence-clean microscopy of a real specimen, seen as it is, and one continuous change of scale that carries the viewer from the glass slide in the hand to a single cell. Focus breathes when the magnification changes, a focal plane sweeps when the camera lands, and every scale bar, field of view and reading comes from the image's own metadata.",
+   "frame": "gallery/frames/microscope.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/microscope.mp4",
+   "instant": null
+  },
+  {
+   "slug": "midcentury-toon",
+   "name": "Mid-century Cartoon",
+   "category": "Cartoon & Anime",
+   "film": "Meet Pip",
+   "line": "A robot vacuum set up in three steps, told like a 1950s classroom film.",
+   "uses": [
+    "Set-up guides",
+    "Help centres",
+    "How-to"
+   ],
+   "dur": 40,
+   "essence": "1950s flat colour and limited animation for \"follow along\" films: colour printed a few pixels off its broken ink line, bodies that hold still while hands do the work, abstract colour-block rooms, a calm classroom narrator, and a cool-jazz combo.",
+   "frame": "gallery/frames/midcentury-toon.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/midcentury-toon.mp4",
+   "instant": null
+  },
+  {
+   "slug": "news-package",
+   "name": "Broadcast News Package",
+   "category": "Edit & Documentary",
+   "film": "The Week in AI",
+   "line": "Four AI stories from one week in a full on-air package: rundown, headline strap, price board, spec card.",
+   "uses": [
+    "News round-ups",
+    "Bulletins",
+    "Market updates"
+   ],
+   "dur": 53.5,
+   "essence": "A television newsroom's on-air package, built entirely in code: a sting that becomes the channel bug, a rundown of today's stories that opens and closes the bulletin, a lower-third strap that never leaves the bottom of the frame, and full-frame graphics (split-flap price boards, a line breaking a threshold, explainer maps, documents flying out of a city, quote cards, spec cards with proportion bars, stamps) that carry the facts. The style is the package system plus its cutting rules, not a drawing style. 16:9, a clean frame: no burned-in subtitles, no news crawl.",
+   "frame": "gallery/frames/news-package.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/news-package.mp4",
+   "instant": null
+  },
+  {
+   "slug": "newsreel",
+   "name": "1920s Newsreel",
+   "category": "Edit & Documentary",
+   "film": "Knock-Knee Alert",
+   "line": "1926: the papers say the Charleston will ruin America's knees; at Ford's own picnic the kids dance it anyway.",
+   "uses": [
+    "History stories",
+    "Fads & eras",
+    "Anniversaries"
+   ],
+   "dur": 54.6,
+   "essence": "A sound newsreel of the late 1920s, cut from real archive material: a searchlight-and-globe ident with a brass fanfare, a newspaper that spins into the lens, a fast and cheerful announcer on an optical soundtrack, place-and-date cards, maps, magazine pages and documents, wipes, flips and irises, and a hot band that can stop dead for the punchline.",
+   "frame": "gallery/frames/newsreel.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/newsreel.mp4",
+   "instant": null
+  },
+  {
+   "slug": "one-line",
+   "name": "One-line Drawing",
+   "category": "Hand-drawn & Painting",
+   "film": "The Line That Never Lifted",
+   "line": "One unbroken line draws a whole life, then the pen passes to a child.",
+   "uses": [
+    "Brand stories",
+    "Life milestones",
+    "Minimal ads"
+   ],
+   "dur": 47.5,
+   "essence": "A single ink line that never leaves the paper. Everything on screen is that one line being drawn; scenes don't cut, they morph.",
+   "frame": "gallery/frames/one-line.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/one-line.mp4",
+   "instant": null
+  },
+  {
+   "slug": "paper-lantern",
+   "name": "Paper-cut Lightbox",
+   "category": "East Asian Traditions",
+   "film": "The Last Night Train",
+   "line": "An old night train makes its last run, from a snowy mountain halt through a long tunnel to the sea, its lit windows going out one by one at the end of the line.",
+   "uses": [
+    "Journeys and travel",
+    "Farewells and anniversaries",
+    "Places and their stories"
+   ],
+   "dur": 51,
+   "essence": "A layered paper-cut shadow box (纸雕灯) lit from behind: 6–9 sheets of cut card stacked in a shallow box, a warm light glowing through the paper, windows and moons burning through holes, soft shadows falling from each layer onto the next. The camera is a macro lens inside a lamp: it can show the box, or let the paper scenery fill the whole screen.",
+   "frame": "gallery/frames/paper-lantern.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/paper-lantern.mp4",
+   "instant": null
+  },
+  {
+   "slug": "paper-popup",
+   "name": "Paper Pop-up Book",
+   "category": "Materials & 3D",
+   "film": "Pip's Paper Adventure",
+   "line": "A pop-up book opens on a desk; a sprite named Pip adventures through paper worlds and jumps out into ours.",
+   "uses": [
+    "Children's books",
+    "Game trailers",
+    "Story films"
+   ],
+   "dur": 133,
+   "essence": "A pop-up book on a real desk becomes a stage: flat cut-paper actors with white borders perform in front of paper sets that spring up from the page, under real lamp light and a real macro lens.",
+   "frame": "gallery/frames/paper-popup.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/paper-popup.mp4",
+   "instant": null
+  },
+  {
+   "slug": "papercut-red",
+   "name": "Red Paper-cut",
+   "category": "East Asian Traditions",
+   "film": "Nian Comes to Town",
+   "line": "On New Year's Eve the beast Nian comes to town, and one girl's giant paper-cut lights up the village to scare it off.",
+   "uses": [
+    "Lunar New Year",
+    "Festive greetings",
+    "Folk tales"
+   ],
+   "dur": 49,
+   "essence": "Chinese window-flower paper-cuts brought to life: jointed red cut-outs on paper grounds, where the cut *is* the drawing and the holes are where the light gets in.",
+   "frame": "gallery/frames/papercut-red.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/papercut-red.mp4",
+   "instant": null
+  },
+  {
+   "slug": "pictogram-motion",
+   "name": "Pictogram Motion",
+   "category": "Graphic & Type",
+   "film": "Left Behind",
+   "line": "A yellow umbrella left on a bus waits out a sunny day on the lost-property shelf, then opens with 312 others when the storm comes back: objects, vehicles, weather and signs as beat-locked geometric pictograms.",
+   "uses": [
+    "Public services and city stories",
+    "Brand and event identity films",
+    "Explainers told through signs and objects"
+   ],
+   "dur": 50,
+   "essence": "A beat-locked film built from three things only: a square-grid \"core graphic\" of circles, half-discs and tiny patterned cells whose rows slide past each other; geometric pictograms (objects, vehicles, weather, signs, and a disc-headed figure when one is needed) made of round-capped bars, discs and capsules; and bold bilingual type that slides up out of masks. Every cut lands on a drum hit.",
+   "frame": "gallery/frames/pictogram-motion.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/pictogram-motion.mp4",
+   "instant": null
+  },
+  {
+   "slug": "pixel-rpg",
+   "name": "16-bit Pixel RPG",
+   "category": "Games",
+   "film": "The Last Save Point",
+   "line": "At the final boss door a hero saves the game, and the save screen replays the whole journey.",
+   "uses": [
+    "Game trailers",
+    "Recaps",
+    "Nostalgia"
+   ],
+   "dur": 54.5,
+   "essence": "A short film that looks, sounds and *behaves* like a mid-90s console role-playing game: 320×180 pixels, a limited indexed palette, text boxes that type, menus, save files, chip music with echo.",
+   "frame": "gallery/frames/pixel-rpg.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/pixel-rpg.mp4",
+   "instant": null
+  },
+  {
+   "slug": "printed-long-take",
+   "name": "Printed Long Take",
+   "category": "Print & Printmaking",
+   "film": "Thirty-Three Cranes",
+   "line": "Red-crowned cranes in a Hokkaido valley, one scratchboard take, counted back from 33 to 1,927.",
+   "uses": [
+    "Journeys",
+    "Wildlife",
+    "Landscapes"
+   ],
+   "dur": 60,
+   "essence": "A three-dimensional world rendered as a scratchboard print, ink and paper with one red, crossed by one unbroken camera move. Depth, weather and light are all cut lines; the camera travels through the print instead of the print being turned page by page.",
+   "frame": "gallery/frames/printed-long-take.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/printed-long-take.mp4",
+   "instant": null
+  },
+  {
+   "slug": "risograph",
+   "name": "Risograph Print",
+   "category": "Print & Printmaking",
+   "film": "Sunday Ride",
+   "line": "A Sunday-morning bike ride through the city — bakery, park, riverside — each stop adding an ink until three misregistered plates overprint.",
+   "uses": [
+    "Indie brands",
+    "Zines",
+    "Lifestyle"
+   ],
+   "dur": 40,
+   "essence": "Animation that looks printed, frame by frame, on a stencil duplicator: two or three translucent spot inks overprinted on warm paper, halftone dots, ink grain, and plates that never quite line up.",
+   "frame": "gallery/frames/risograph.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/risograph.mp4",
+   "instant": null
+  },
+  {
+   "slug": "rubber-hose",
+   "name": "1930s Rubber Hose Cartoon",
+   "category": "Cartoon & Anime",
+   "film": "Coffee Cup Chase",
+   "line": "A coffee cup chases a runaway sugar cube around the kitchen, 1930s-cartoon style.",
+   "uses": [
+    "Food & drink",
+    "Retro ads",
+    "Kids"
+   ],
+   "dur": 50,
+   "essence": "Black-and-white hand-inked cartoons where every object is alive and swings to a hot jazz band.",
+   "frame": "gallery/frames/rubber-hose.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/rubber-hose.mp4",
+   "instant": null
+  },
+  {
+   "slug": "satellite-briefing",
+   "name": "Satellite Briefing",
+   "category": "Evidence Films",
+   "film": "The Map Still Says Sea",
+   "line": "A satellite follows the map to the Aral Sea and finds a desert; only the part someone dammed came back.",
+   "uses": [
+    "Climate",
+    "News explainers",
+    "Geography"
+   ],
+   "dur": 37.8,
+   "essence": "Real satellite imagery of a real place, graded down to an analyst's grey, with thin white measurement lines drawn on the ground: a lock-on reticle, outlines, a range line, one reading. One continuous zoom built from stacked imagery plates carries the viewer from orbit to the ground and back, and time can run inside one locked frame.",
+   "frame": "gallery/frames/satellite-briefing.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/satellite-briefing.mp4",
+   "instant": null
+  },
+  {
+   "slug": "scifi-toon",
+   "name": "Sci-Fi Sitcom Toon",
+   "category": "Cartoon & Anime",
+   "film": "Coffee Run",
+   "line": "A jaded genius opens a portal just to buy coffee and tumbles through ever-stranger universes.",
+   "uses": [
+    "Comedy",
+    "Tech brands",
+    "Social shorts"
+   ],
+   "dur": 57.5,
+   "essence": "Adult-animation sci-fi sitcom: thick boiling outlines, flat colour, a duo whose reactions don't match, a glowing portal, and one palette per world.",
+   "frame": "gallery/frames/scifi-toon.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/scifi-toon.mp4",
+   "instant": null
+  },
+  {
+   "slug": "shadow-puppet",
+   "name": "Shadow Puppetry",
+   "category": "East Asian Traditions",
+   "film": "Hou Yi Shoots the Suns",
+   "line": "Ten suns scorch the earth until the archer Hou Yi draws his bow, told with leather puppets on a lit screen.",
+   "uses": [
+    "Myths & folklore",
+    "Heritage",
+    "Festivals"
+   ],
+   "dur": 54.4,
+   "essence": "Chinese shadow theatre: translucent dyed-hide puppets, carved like lace, pressed against a cotton screen and lit from behind by oil lamps.",
+   "frame": "gallery/frames/shadow-puppet.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/shadow-puppet.mp4",
+   "instant": null
+  },
+  {
+   "slug": "silent-film",
+   "name": "1920s Silent Film",
+   "category": "Cinema & Eras",
+   "film": "The Runaway Loaf",
+   "line": "A baker's boy chases a runaway loaf downhill, then breaks it in half for a hungry girl.",
+   "uses": [
+    "Comedy",
+    "Retro brands",
+    "Silent storytelling"
+   ],
+   "dur": 54.2,
+   "essence": "An engraved-illustration silent film projected in a picture house: ink line and silver wash, a 4:3 print that flickers and weaves between velvet curtains, intertitles instead of voices, and a cinema pianist who plays every beat.",
+   "frame": "gallery/frames/silent-film.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/silent-film.mp4",
+   "instant": null
+  },
+  {
+   "slug": "silkscreen-poster",
+   "name": "Silkscreen Travel Poster",
+   "category": "Print & Printmaking",
+   "film": "The Long Way Home",
+   "line": "A traveller crosses the world one full-bleed screen print at a time, a ticket stub counting the distance from home, until the far side turns into the way back.",
+   "uses": [
+    "Destination guides",
+    "Tourism",
+    "Event posters"
+   ],
+   "dur": 50,
+   "essence": "Opaque, hard-edged flat inks pulled one colour at a time through a screen: 4–6 inks per poster, stepped colour bands instead of gradients, thin paper-white gaps where the registration slips. Information is revealed the way the print is made: one layer, one beat.",
+   "frame": "gallery/frames/silkscreen-poster.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/silkscreen-poster.mp4",
+   "instant": null
+  },
+  {
+   "slug": "spy-titles",
+   "name": "60s Spy Title Sequence",
+   "category": "Graphic & Type",
+   "film": "The Velvet Cipher",
+   "line": "Opening titles for an imaginary 1964 spy film: a chase for a stolen key until the shapes lock into the title.",
+   "uses": [
+    "Title sequences",
+    "Event openers",
+    "Trailers"
+   ],
+   "dur": 44.1,
+   "essence": "A cut-paper, four-ink opening title sequence for a film that never existed: silhouettes move through sets built out of the credits themselves, every brass stab is a cut, and a title is assembled from the pieces.",
+   "frame": "gallery/frames/spy-titles.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/spy-titles.mp4",
+   "instant": null
+  },
+  {
+   "slug": "stained-glass",
+   "name": "Stained Glass",
+   "category": "Graphic & Type",
+   "film": "The Dragon of the East Window",
+   "line": "Sunlight crosses a cathedral window from dawn to dusk, waking each pane of a knight-and-dragon tale.",
+   "uses": [
+    "Legends",
+    "Heritage",
+    "Holiday stories"
+   ],
+   "dur": 56.5,
+   "essence": "A medieval stained-glass window seen from inside a dark stone hall, alive only where the sun touches it: light is the clock, the camera and the story.",
+   "frame": "gallery/frames/stained-glass.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/stained-glass.mp4",
+   "instant": null
+  },
+  {
+   "slug": "swiss-motion",
+   "name": "Swiss Motion Graphics",
+   "category": "Graphic & Type",
+   "film": "Five Rules for a Poster",
+   "line": "A concert poster lays itself out by five Swiss design rules; the fifth is to break just one.",
+   "uses": [
+    "Brand identity",
+    "Events",
+    "Design education"
+   ],
+   "dur": 44,
+   "essence": "International Typographic Style in motion: a modular grid, one typeface, one signal colour, and movement as exact as a printing press.",
+   "frame": "gallery/frames/swiss-motion.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/swiss-motion.mp4",
+   "instant": "swiss"
+  },
+  {
+   "slug": "teardown",
+   "name": "Exploded Teardown",
+   "category": "Evidence Films",
+   "film": "21 Keys, Opened",
+   "line": "Half an open-source keyboard comes apart in one orbit, down to the chip, then closes with its real dimensions.",
+   "uses": [
+    "Hardware launches",
+    "Product pages",
+    "Spec explainers"
+   ],
+   "dur": 38.8,
+   "essence": "A real product, built from its own engineering files (CAD, PCB layout, bill of materials), lit like a studio packshot and taken apart in front of the camera: the layers lift on one axis, the camera travels between them, every part is named with the numbers its files contain, and it closes again into one object.",
+   "frame": "gallery/frames/teardown.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/teardown.mp4",
+   "instant": null
+  },
+  {
+   "slug": "telestrator",
+   "name": "Sports Telestrator",
+   "category": "Edit & Documentary",
+   "film": "Freeze Frame",
+   "line": "Down 3–0 at half-time, Fenerbahçe scored three in 12 minutes: freeze, draw, split screen, shot map.",
+   "uses": [
+    "Sports analysis",
+    "Match recaps",
+    "Coaching"
+   ],
+   "dur": 54.4,
+   "essence": "The TV football analysis segment: play the clip at full speed, rewind, freeze it, and draw on the broadcast picture — rings under players' feet, marker arrows for the ball, a red patch for the space nobody covered — then play on, switch angles, count the frames, and flatten the pitch into a board. Real match footage is the ground; every line is drawn on top of it and moves with it. A studio show's packaging (sting, corner bug, score bar, a yellow wipe) holds it together. 16:9.",
+   "frame": "gallery/frames/telestrator.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/telestrator.mp4",
+   "instant": null
+  },
+  {
+   "slug": "tilt-shift",
+   "name": "Tilt-Shift Miniature",
+   "category": "Materials & 3D",
+   "film": "Toy Town Rush Hour",
+   "line": "Morning rush hour in a town that looks like a model: traffic, trains and tiny people.",
+   "uses": [
+    "City promos",
+    "Real estate",
+    "Transport"
+   ],
+   "dur": 38,
+   "essence": "A real-looking place photographed from high above with a tilted lens and a time-lapse camera, so the whole world reads as a tabletop model.",
+   "frame": "gallery/frames/tilt-shift.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/tilt-shift.mp4",
+   "instant": null
+  },
+  {
+   "slug": "transit-map",
+   "name": "Transit Map",
+   "category": "Information & Keynote",
+   "film": "6 Kilometres",
+   "line": "A printed metro map grows from one 6 km line in 1993 to 21 lines and 906 km.",
+   "uses": [
+    "Transport",
+    "Growth over time",
+    "Networks"
+   ],
+   "dur": 47,
+   "essence": "A metro schematic printed on a physical sheet: lines held to eight directions, white stops, black-outlined interchange capsules, water as a flat blue band. The network is drawn on by glowing pen tips while a real perspective camera moves over the paper: it rides a tip, drops low where a line dives under water, pulls back through levels of detail and sweeps across the densest knot at a low angle with a shallow focus.",
+   "frame": "gallery/frames/transit-map.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/transit-map.mp4",
+   "instant": null
+  },
+  {
+   "slug": "ukiyoe",
+   "name": "Ukiyo-e",
+   "category": "East Asian Traditions",
+   "film": "Toward the Mountain",
+   "line": "A traveller walks toward a distant mountain; every shot is a woodblock print, a great wave at the climax, the mountain and the whole scroll at the end.",
+   "uses": [
+    "Travel",
+    "Japanese culture",
+    "Poetry"
+   ],
+   "dur": 44,
+   "essence": "Edo-period woodblock prints brought to life: flat colour blocks, carved ink lines, bokashi skies, paper you can feel, and a camera that moves over the print like an unrolling handscroll.",
+   "frame": "gallery/frames/ukiyoe.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/ukiyoe.mp4",
+   "instant": null
+  },
+  {
+   "slug": "urban-sketch",
+   "name": "Urban Sketch · Pen & Wash",
+   "category": "Hand-drawn & Painting",
+   "film": "Where the Wind Went",
+   "line": "A park that is only a pen sketch; wherever the wind carries her straw hat, colour follows.",
+   "uses": [
+    "City & travel",
+    "Architecture",
+    "Lifestyle brands"
+   ],
+   "dur": 32.4,
+   "essence": "A sketchbook page drawn on location: fine sepia fineliner lines that wobble, overshoot and never quite close, with loose transparent watercolour dropped on top. The colour sits slightly off the lines, spills over them, and dissolves into cream cold-press paper at the page edge.",
+   "frame": "gallery/frames/urban-sketch.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/urban-sketch.mp4",
+   "instant": null
+  },
+  {
+   "slug": "visual-investigation",
+   "name": "Visual Investigation",
+   "category": "Edit & Documentary",
+   "film": "The Hindenburg: Four Minutes, 32 Seconds",
+   "line": "Newsreel, photos, testimony and the 1937 inquiry on one clock: five sources point to the same spot.",
+   "uses": [
+    "Reconstructions",
+    "Fact-checks",
+    "Incident reports"
+   ],
+   "dur": 60,
+   "essence": "A cold investigation desk: footage, photographs, documents, sound and maps from one real event, laid out on one shared clock so they check each other. The clock lives inside the picture — timestamps on the evidence, a playhead on a data chart, a stopwatch over the decisive seconds; frozen frames are circled and magnified; quotes are highlighted on the page they come from; a plan shows where cameras stood and where they looked; what is known and what is not are kept apart; at the end every piece of evidence is pulled into one map.",
+   "frame": "gallery/frames/visual-investigation.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/visual-investigation.mp4",
+   "instant": null
+  },
+  {
+   "slug": "watercolor",
+   "name": "Watercolor Brush",
+   "category": "Hand-drawn & Painting",
+   "film": "Follow the Rain",
+   "line": "Follow the rain from Australia's red desert heart to its green coast in one unbroken painted walk.",
+   "uses": [
+    "Nature documentary",
+    "Travel",
+    "Science explainers"
+   ],
+   "dur": 113.6,
+   "essence": "A hand-painted journal page that paints itself: translucent brush strokes with dry-brush flying white on warm cotton paper, hand-written notes beside what is painted, nothing drawn with a vector line.",
+   "frame": "gallery/frames/watercolor.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/watercolor.mp4",
+   "instant": null
+  },
+  {
+   "slug": "white-model",
+   "name": "Projection on White Model",
+   "category": "Evidence Films",
+   "film": "How a Flattened City Grew Back",
+   "line": "A projector paints Rotterdam's white model layer by layer, from the 1940 gap to today's towers.",
+   "uses": [
+    "Urban planning",
+    "Exhibitions",
+    "City data"
+   ],
+   "dur": 40,
+   "essence": "A pure white massing model of a real place stands on a plinth in a dark room, and a projector paints data onto it as light: one layer at a time, falling on the surfaces that face it, spilling a little past the plate. The model never changes; only the light on it does.",
+   "frame": "gallery/frames/white-model.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/white-model.mp4",
+   "instant": null
+  },
+  {
+   "slug": "whiteboard",
+   "name": "Whiteboard Explainer",
+   "category": "Hand-drawn & Painting",
+   "film": "Einstein in Your Pocket",
+   "line": "How your phone knows where you are: GPS, atomic clocks, and the 38 microseconds relativity adds every day.",
+   "uses": [
+    "Explainers",
+    "Online courses",
+    "Science"
+   ],
+   "dur": 111,
+   "essence": "An explainer drawn live on one glossy dry-erase board: single-line handwriting that is actually *written* stroke by stroke, floating markers with no hand, magnets that can move, an eraser that can rewind, and a camera that travels across the board instead of cutting.",
+   "frame": "gallery/frames/whiteboard.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/whiteboard.mp4",
+   "instant": null
+  },
+  {
+   "slug": "woodcut",
+   "name": "Woodcut Print",
+   "category": "Print & Printmaking",
+   "film": "The Bell Founder",
+   "line": "A village spends a whole winter casting one bell; the first time it rings, the snow stops.",
+   "uses": [
+    "Folk tales",
+    "Craft brands",
+    "Book trailers"
+   ],
+   "dur": 58.5,
+   "essence": "A relief print that carves itself: every frame is a black wood block, and light only exists where a knife has cut it away. One colour at most, and only for the thing that burns.",
+   "frame": "gallery/frames/woodcut.jpg",
+   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/woodcut.mp4",
+   "instant": null
+  }
+ ],
+ "templates": [
+  {
+   "id": "swiss",
+   "name": "Swiss Motion Graphics",
+   "blurb": "Modular grid, one signal colour, type that snaps on the beat.",
+   "accents": [
+    "#E30613",
+    "#FF5A00",
+    "#1F3FFF",
+    "#00A651"
+   ],
+   "librarySlug": "swiss-motion",
+   "teaser": "gallery/teasers/swiss.mp4",
+   "teaserPortrait": "gallery/teasers/swiss-portrait.mp4"
+  },
+  {
+   "id": "keynote",
+   "name": "Dark Tech Keynote",
+   "blurb": "Near-black stage, light-sweep reveals, one luminous accent.",
+   "accents": [
+    "#B7F34A",
+    "#8B7CFF",
+    "#FF7A1A",
+    "#3DD6F5"
+   ],
+   "librarySlug": "dark-keynote",
+   "teaser": "gallery/teasers/keynote.mp4",
+   "teaserPortrait": "gallery/teasers/keynote-portrait.mp4"
+  }
+ ]
+}

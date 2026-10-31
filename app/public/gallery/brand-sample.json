@@ -1,0 +1,5 @@
+{"title":"Brand preview","bpm":112,"voice":{"durs":{}},"scenes":[
+{"type":"title","kicker":"Brand kit","text":"Your story, your look","sub":"Colours, type and logo in every frame","narration":""},
+{"type":"number","kicker":"Impact","number":"3x","unit":"faster","text":"From idea to finished film","narration":""},
+{"type":"list","kicker":"Built in","text":"Every film carries","items":["Your palette","Your typefaces","Your logo"],"narration":""},
+{"type":"end","kicker":"Ready","text":"Make it yours","sub":"Brand kits apply to every film","narration":""}]}
