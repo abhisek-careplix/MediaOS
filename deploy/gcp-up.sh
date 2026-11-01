@@ -35,8 +35,8 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "$DRY" ] && [ -t 0 ]; then
   echo
 fi
 
-say "1/7  Compute Engine API"
-gc services enable compute.googleapis.com
+say "1/7  Compute Engine and Vertex AI APIs"
+gc services enable compute.googleapis.com aiplatform.googleapis.com
 
 say "2/7  Static IP address"
 have compute addresses describe "$NAME-ip" --region "$REGION" || gc compute addresses create "$NAME-ip" --region "$REGION"
@@ -51,7 +51,17 @@ have compute firewall-rules describe "$NAME-web" || gc compute firewall-rules cr
 say "4/7  Virtual machine"
 have compute instances describe "$NAME" --zone "$ZONE" || gc compute instances create "$NAME" --zone "$ZONE" \
   --machine-type "$MACHINE" --image-family "$IMAGE_FAMILY" --image-project debian-cloud \
-  --boot-disk-size "$DISK" --boot-disk-type pd-balanced --address "$IP" --tags "$NAME"
+  --boot-disk-size "$DISK" --boot-disk-type pd-balanced --address "$IP" --tags "$NAME" --scopes cloud-platform
+
+# generated storyboard frames call Vertex AI with the VM's own service account, which needs the cloud-platform scope;
+# a VM created before that gets it once (the scope can only change while the VM is stopped: about a minute offline)
+if [ -z "$DRY" ] && ! gcloud --project "$PROJECT" compute instances describe "$NAME" --zone "$ZONE" --format='value(serviceAccounts[0].scopes)' | grep -q cloud-platform; then
+  echo "  giving the VM access to Vertex AI (a short restart)"
+  SA=$(gcloud --project "$PROJECT" compute instances describe "$NAME" --zone "$ZONE" --format='value(serviceAccounts[0].email)')
+  gc compute instances stop "$NAME" --zone "$ZONE"
+  gc compute instances set-service-account "$NAME" --zone "$ZONE" --service-account "$SA" --scopes cloud-platform
+  gc compute instances start "$NAME" --zone "$ZONE"
+fi
 
 say "5/7  Packaging the app"
 TMP=$(mktemp -d)

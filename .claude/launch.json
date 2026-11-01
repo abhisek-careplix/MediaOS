@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "videogen",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["app/server.mjs"],
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["VERTEX_PROJECT=careplix-labs", "node", "app/server.mjs"],
       "port": 5178
     }
   ]

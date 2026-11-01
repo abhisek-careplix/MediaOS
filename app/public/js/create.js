@@ -1,5 +1,6 @@
 // Create: compose a prompt → Claude writes the script → live editor (viewer, timeline, inspector) → export.
 import { $, $$, h, api, icon, toast, sheet, fmt, app, go, pillSelect, segmented, codeSpans } from './core.js';
+import { attachments, dropPhotos, uploading, attachedIds } from './attach.js';
 
 const IDEAS = [
   ['Product launch', 'A 30-second launch film for Tidal, a new app that turns messy meeting notes into a clean weekly plan. Confident and minimal.'],
@@ -9,7 +10,9 @@ const IDEAS = [
   ['Advice', 'Three small habits that help teenagers sleep better, for parents. Calm and practical.'],
 ];
 const TYPES = ['title', 'statement', 'number', 'list', 'compare', 'end'];
-export const TYPE_COLOR = { title: '#0a84ff', statement: '#bf5af2', number: '#ff9f0a', list: '#30d158', compare: '#ff375f', product: '#ffd60a', end: '#64d2ff' };
+export const TYPE_COLOR = { title: '#0a84ff', statement: '#bf5af2', number: '#ff9f0a', list: '#30d158', compare: '#ff375f', product: '#ffd60a', end: '#64d2ff', shot: '#8e8e93' };
+// a film's template, including the animatic, which Create doesn't offer
+const templateOf = id => app.gallery.templates.find(t => t.id === id) || { id, name: id === 'animatic' ? 'Animatic' : id, accents: ['#0a84ff'] };
 // what is being made: the format changes Claude's brief (a hook first, one message, a call to action) and the defaults
 const KINDS = [
   { v: 'film', label: 'Film', placeholder: 'Describe your film: the story, who it’s for, the mood.' },
@@ -23,6 +26,7 @@ const FIELDS = {
   list: [['kicker', 'Kicker'], ['text', 'Heading', 2], ['items', 'Items (one per line)', 4]],
   compare: [['kicker', 'Kicker'], ['text', 'Heading', 2], ['left', 'Left'], ['right', 'Right (the hero)']],
   product: [['kicker', 'Kicker'], ['text', 'Headline', 2], ['sub', 'Supporting line', 2], ['items', 'Callouts (one per line, up to 3)', 3]],
+  shot: [['text', 'On-screen text', 2]],
   end: [['kicker', 'Kicker'], ['text', 'Closing line', 2], ['sub', 'Sign-off', 2]],
 };
 const WRITING = ['Reading your brief', 'Finding the arc of the story', 'Choosing a palette and a tempo', 'Writing the narration', 'Timing every scene to the beat'];
@@ -86,11 +90,9 @@ function renderCompose() {
     narr, voice,
     pillSelect(MODELS, opts.model, v => { opts.model = v; }, 'Writer'),
     h('span', { class: 'spacer' }), h('span', { class: 'kbd' }, '⌘↵'), goBtn);
-  const box = h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta, attachments(), bar));
-  // images dropped anywhere on the prompt become product photos
-  box.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); box.classList.add('over'); } });
-  box.addEventListener('dragleave', e => { if (!box.contains(e.relatedTarget)) box.classList.remove('over'); });
-  box.addEventListener('drop', e => { e.preventDefault(); box.classList.remove('over'); attach([...e.dataTransfer.files], 'media'); });
+  const att = attachments(opts);
+  const box = h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta, att, bar));
+  dropPhotos(box, att);
 
   const ideas = h('div', { class: 'ideas' }, IDEAS.map(([label, text]) => h('button', { class: 'chip', onclick: () => { ta.value = opts.prompt = text; goBtn.disabled = false; ta.focus(); } }, icon('sparkles', 13), label)));
 
@@ -123,58 +125,10 @@ function renderCompose() {
   setTimeout(() => ta.focus(), 50);
 }
 
-// —— attachments: product photos, reference images and notes ——
-async function upload(file) {
-  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error(`${file.name}: use PNG, JPEG or WebP images.`);
-  if (file.size > 12e6) throw new Error(`${file.name} is over 12 MB.`);
-  const r = await fetch('/api/uploads', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.statusText);
-  return j;
-}
-async function attach(files, list) {
-  const room = 4 - opts[list].length;
-  if (files.length > room) toast(`Up to 4 ${list === 'media' ? 'product photos' : 'reference images'}.`, 'error');
-  const adding = files.slice(0, Math.max(0, room)).map(file => ({ file, url: URL.createObjectURL(file), busy: true }));
-  opts[list].push(...adding);
-  paintAttachments();
-  await Promise.all(adding.map(async a => {
-    try { Object.assign(a, await upload(a.file), { busy: false }); } catch (e) { toast(e.message, 'error'); opts[list].splice(opts[list].indexOf(a), 1); }
-    paintAttachments();
-  }));
-}
-let attachBox = null;
-function attachments() {
-  attachBox = h('div', { class: 'attach' });
-  paintAttachments();
-  return attachBox;
-}
-function paintAttachments() {
-  if (!attachBox) return;
-  const pick = list => {
-    const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true, hidden: true, onchange: e => attach([...e.target.files], list) });
-    document.body.append(input);
-    input.click();
-    setTimeout(() => input.remove(), 60000);
-  };
-  const tile = (a, list, tag) => h('div', { class: 'att' + (a.busy ? ' busy' : ''), title: tag },
-    h('img', { src: a.url, alt: tag }), h('span', { class: 'tag' }, tag),
-    h('button', { class: 'rm', 'aria-label': 'Remove ' + tag.toLowerCase(), onclick: () => { opts[list].splice(opts[list].indexOf(a), 1); paintAttachments(); } }, icon('x', 11)));
-  const notes = h('textarea', { rows: 3, class: 'notes', placeholder: 'Reference notes: product facts, the offer, links, words to use or avoid…', 'aria-label': 'Reference notes', oninput: e => { opts.notes = e.target.value; } });
-  notes.value = opts.notes;
-  attachBox.replaceChildren(
-    ...opts.media.map((a, i) => tile(a, 'media', `Product ${i + 1}`)),
-    ...opts.refs.map((a, i) => tile(a, 'refs', `Ref ${i + 1}`)),
-    h('button', { class: 'chip', onclick: () => pick('media'), title: 'Product photos are shown in the video' }, icon('photo', 13), 'Product photo'),
-    h('button', { class: 'chip', onclick: () => pick('refs'), title: 'References guide Claude (an example ad, a landing page, a brand guide) but are not shown' }, icon('eye', 13), 'Reference'),
-    h('button', { class: 'chip' + (attachBox.notesOpen || opts.notes ? ' on' : ''), onclick: () => { attachBox.notesOpen = !(attachBox.notesOpen || opts.notes); if (!attachBox.notesOpen) opts.notes = ''; paintAttachments(); } }, icon('pencil', 13), 'Notes'),
-    ...(attachBox.notesOpen || opts.notes ? [notes] : []));
-}
-
 // —— writing ——
 async function create(sample) {
   if (!sample && !opts.prompt.trim()) return toast('Describe your film first.', 'error');
-  if ([...opts.media, ...opts.refs].some(a => a.busy)) return toast('Still uploading your images…');
+  if (uploading(opts)) return toast('Still uploading your images…');
   const looking = !sample && opts.media.length + opts.refs.length > 0;
   const model = MODELS.find(m => m[0] === opts.model)[1];
   const steps = looking ? ['Looking at your images', ...WRITING] : WRITING;
@@ -196,7 +150,7 @@ async function create(sample) {
     }
   }, 1000);
   try {
-    const r = await api('films', { method: 'POST', body: { ...opts, seconds: +opts.seconds, sample, media: opts.media.map(a => a.id), refs: opts.refs.map(a => a.id) } });
+    const r = await api('films', { method: 'POST', body: { ...opts, seconds: +opts.seconds, sample, ...attachedIds(opts) } });
     if (!sample) Object.assign(opts, { media: [], refs: [], notes: '' });
     film = { id: r.id, meta: r.meta, content: r.content, cost: r.cost, took: (performance.now() - t0) / 1000, fresh: true };
     go('create/' + r.id);
@@ -212,7 +166,7 @@ function renderEditor() {
   root.innerHTML = '';
   sel = 0;
   const c = film.content, portrait = film.meta.aspect === '9:16';
-  const tpl = app.gallery.templates.find(t => t.id === film.meta.template);
+  const tpl = templateOf(film.meta.template);
   const title = h('input', { value: c.title || '', 'aria-label': 'Film title', oninput: e => { c.title = e.target.value; queueSave(); } });
   const metaLine = h('small', {}, `${tpl.name} · ${film.meta.aspect}`);
   const exportBtn = h('button', { class: 'btn primary', onclick: startExport }, icon('export', 15), 'Export');
@@ -367,8 +321,9 @@ function renderInspector(tab) {
     h('button', { class: 'btn ghost round', title: 'Duplicate scene', 'aria-label': 'Duplicate scene', onclick: () => { c.scenes.splice(sel + 1, 0, JSON.parse(JSON.stringify(s))); sel++; queueSave(true); } }, icon('plus', 15)),
     h('button', { class: 'btn ghost round danger', title: 'Delete scene', 'aria-label': 'Delete scene', disabled: c.scenes.length <= 2, onclick: () => { c.scenes.splice(sel, 1); sel = Math.max(0, sel - 1); queueSave(true); } }, icon('x', 15))));
   const types = c.media?.length ? [...TYPES.slice(0, -1), 'product', 'end'] : TYPES;
-  body.append(h('div', { class: 'field' }, h('span', {}, 'Scene type'),
+  if (s.type !== 'shot') body.append(h('div', { class: 'field' }, h('span', {}, 'Scene type'),
     segmented(types.map(t => ({ v: t, label: t[0].toUpperCase() + t.slice(1) })), s.type, v => { s.type = v; if (v === 'product') s.image ??= 0; queueSave(true); }, { label: 'Scene type', cls: 'typeseg' })));
+  if (film.meta.production) body.append(h('p', { class: 'faint' }, 'This animatic was made from a storyboard. ', h('a', { href: '#productions/' + film.meta.production }, 'Back to the storyboard')));
   if (s.type === 'product' && c.media?.length) {
     body.append(h('div', { class: 'field' }, h('span', {}, 'Photo'), h('div', { class: 'photo-pick' }, c.media.map((m, i) =>
       h('button', { class: (s.image | 0) === i ? 'on' : '', 'aria-label': `Photo ${i + 1}`, 'aria-pressed': (s.image | 0) === i, onclick: () => { s.image = i; queueSave(true); renderInspector('scene'); } },
@@ -394,7 +349,7 @@ function renderInspector(tab) {
 }
 
 function filmPanel(body, c) {
-  const tpl = app.gallery.templates.find(t => t.id === film.meta.template);
+  const tpl = templateOf(film.meta.template);
   const brandSel = pillSelect([['', 'No brand kit'], ...(app.brands || []).map(b => [b.id, b.name])], c.brand?.id || '', async v => {
     P.status.textContent = 'Applying brand…';
     try {

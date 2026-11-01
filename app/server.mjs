@@ -14,6 +14,8 @@ import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, log
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
+import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript } from './lib/productions.mjs';
+import { vertexStatus } from './lib/vertex.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
 const PORT = +process.env.PORT || 5178;
@@ -161,13 +163,147 @@ async function api(req, res, url, user) {
 
   if (M === 'GET' && parts[0] === 'config') {
     return send(res, 200, {
-      templates: Object.values(TEMPLATES).map(({ id, name, blurb, accents }) => ({ id, name, blurb, accents })),
+      templates: Object.values(TEMPLATES).filter(t => !t.hidden).map(({ id, name, blurb, accents }) => ({ id, name, blurb, accents })),
       voices: VOICES, styles: libraryStyles(), claude: claudeStatus(), lib: LIB, films: FILMS,
       libReady: fs.existsSync(path.join(LIB, 'core/render/video.mjs')), voiceReady: fs.existsSync(path.join(LIB, 'core/tts/kokoro-v1.0.onnx')),
     });
   }
   if (M === 'GET' && parts[0] === 'me') return send(res, 200, { ...user, auth: authOn(), open: OPEN, domains: AUTH.domains, canDirect: canDirect(user) });
   if (M === 'GET' && parts[0] === 'films' && !parts[1]) return send(res, 200, listFilms());
+
+  // —— pre-production: brief → concepts → storyboard → animatic ——
+  if (parts[0] === 'productions') {
+    if (M === 'GET' && parts[1] === 'meta') {
+      const v = await vertexStatus();
+      return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok, model: v.model, reason: v.reason } });
+    }
+    if (M === 'POST' && !parts[1]) {
+      const b = await body(req);
+      if (!String(b.brief || '').trim()) return send(res, 400, { error: 'Write a brief first.' });
+      if (!FORMATS[b.format]) return send(res, 400, { error: 'Pick a format.' });
+      const photos = uploaded(b.media), looks = uploaded(b.refs);
+      if (limited(res, req, 'script', true)) return;
+      const id = `p-${stamp()}-${Math.random().toString(36).slice(2, 6)}`, dir = filmDir(id);
+      fs.mkdirSync(path.join(dir, 'media'), { recursive: true });
+      const copy = (files, sub, stem) => files.map((f, i) => {
+        const name = `${sub}/${stem}-${i + 1}${path.extname(f)}`;
+        fs.mkdirSync(path.join(dir, sub), { recursive: true });
+        fs.copyFileSync(f, path.join(dir, name));
+        return name;
+      });
+      const brand = b.brandId ? readBrand(b.brandId) : null;
+      const style = STYLES[b.style] && (!STYLES[b.style].vertex || (await vertexStatus()).ok) ? b.style : 'sketch';
+      let p = { brief: String(b.brief).slice(0, 4000), format: b.format, style, kind: KINDS.includes(b.kind) ? b.kind : 'ad', seconds: Math.max(10, Math.min(90, +b.seconds || 30)),
+        aspect: b.aspect === '9:16' ? '9:16' : '16:9', brandId: brand?.id || null, brand: brand ? { name: brand.name, tone: brand.tone } : null, notes: String(b.notes || '').slice(0, 4000),
+        model: ['sonnet', 'opus', 'haiku'].includes(b.model) ? b.model : 'sonnet', media: copy(photos, 'media', 'product').map(src => ({ src })), refs: copy(looks, 'refs', 'reference'),
+        concepts: [], concept: null, cast: [], locations: [], shots: [], cost: 0 };
+      writeMeta(dir, { id, mode: 'production', title: p.brief.split(/[.\n]/)[0].slice(0, 70), format: p.format, kind: p.kind, aspect: p.aspect, seconds: p.seconds, brandId: p.brandId, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'draft' });
+      try { ({ p } = await writeConcepts(dir, p, { model: p.model })); } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); throw e; }
+      saveProduction(dir, p);
+      return send(res, 200, { id, meta: readMeta(dir), production: p, review: review(p) });
+    }
+    const id = parts[1], dir = filmDir(id), p = readProduction(dir);
+    if (!p) return send(res, 404, { error: 'no such production' });
+    const state = () => ({ meta: readMeta(dir), production: readProduction(dir), review: review(readProduction(dir)), job: getJob(id)?.status === 'running' ? { status: 'running', step: getJob(id).step, pct: getJob(id).pct } : null });
+    // the storyboard is drawn in the background; the editor follows /api/films/<id>/events and refetches
+    const drawAll = ids => {
+      if (getJob(id)?.status === 'running') return false;
+      const job = startJob(id, dir, 'boards');
+      let done = 0;
+      emit(job, { step: `Drawing ${ids.length} frames`, pct: 2 });
+      drawBoards(dir, ids, { model: p.model, onStep: step => emit(job, { step }), onShot: (sid, err) => emit(job, { pct: Math.round(100 * ++done / ids.length), step: `Drew ${done} of ${ids.length}` }, err ? `frame ${sid} failed: ${err.message}` : `frame ${sid}`) })
+        .then(() => {
+          const now = readProduction(dir), first = now.shots.find(s => s.board);
+          writeMeta(dir, { ...readMeta(dir), cover: first?.board || null });
+          emit(job, { status: 'done', step: 'Storyboard ready', pct: 100 });
+        })
+        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
+      return true;
+    };
+    if (M === 'GET' && !parts[2]) return send(res, 200, state());
+    if (M === 'PUT' && !parts[2]) {
+      // edits from the storyboard editor; frames, boxes and photos stay the server's
+      const b = await body(req), keep = new Map(p.shots.map(s => [s.id, s]));
+      const text = (v, n = 600) => String(v ?? '').slice(0, n);
+      if (b.title != null) p.title = text(b.title, 120);
+      if (b.style && STYLES[b.style]) {
+        if (STYLES[b.style].vertex && !(await vertexStatus()).ok) return send(res, 400, { error: 'Generated frames need Vertex AI, which this server cannot reach.' });
+        p.style = b.style;
+      }
+      if (Array.isArray(b.cast)) {
+        const refs = new Map(p.cast.map(c => [c.id, c]));
+        p.cast = b.cast.slice(0, 6).map(c => ({ id: text(c.id, 12), name: text(c.name, 60), look: text(c.look), wardrobe: text(c.wardrobe, 300), voice: text(c.voice, 200), ref: refs.get(c.id)?.ref || null, refKey: refs.get(c.id)?.refKey || null }));
+      }
+      if (Array.isArray(b.locations)) p.locations = b.locations.slice(0, 6).map(l => ({ id: text(l.id, 12), name: text(l.name, 60), look: text(l.look) }));
+      if (Array.isArray(b.shots)) {
+        const photos = (p.media || []).length;
+        p.shots = b.shots.slice(0, 30).map(s => {
+          const old = keep.get(s.id);
+          return { id: old ? old.id : 's' + Math.random().toString(36).slice(2, 8), size: text(s.size, 40), angle: text(s.angle, 80), move: text(s.move, 40), dur: Math.max(0.5, Math.min(12, +s.dur || 2.5)),
+            engine: ['video', 'presenter', 'code', 'product'].includes(s.engine) ? s.engine : 'video', action: text(s.action, 900), vo: text(s.vo), super: text(s.super, 200),
+            cast: Array.isArray(s.cast) ? s.cast.map(c => text(c, 12)).slice(0, 6) : [], location: text(s.location, 12),
+            product: Number.isInteger(s.product) && s.product >= 0 && s.product < photos ? s.product : -1, proof: Array.isArray(s.proof) ? s.proof.map(x => text(x, 40)).slice(0, 6) : [],
+            board: old?.board || null, box: old?.box || null, fallback: old?.fallback || null };
+        });
+        for (const [sid, s] of keep) if (!p.shots.some(x => x.id === sid) && s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
+      }
+      saveProduction(dir, p);
+      if (p.title) writeMeta(dir, { ...readMeta(dir), title: p.title });
+      return send(res, 200, state());
+    }
+    if (M === 'POST' && parts[2] === 'concepts') {
+      if (limited(res, req, 'script', true)) return;
+      saveProduction(dir, (await writeConcepts(dir, p, { model: p.model })).p);
+      return send(res, 200, state());
+    }
+    if (M === 'POST' && parts[2] === 'shots') {
+      const b = await body(req);
+      if (!(b.concept >= 0 && b.concept < p.concepts.length)) return send(res, 400, { error: 'Pick a concept.' });
+      if (getJob(id)?.status === 'running') return send(res, 409, { error: 'The storyboard is still being drawn.' });
+      if (limited(res, req, 'script', true)) return;
+      for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
+      for (const c of p.cast) if (c.ref && /^cast\/[\w-]+\.png$/.test(c.ref)) fs.rmSync(path.join(dir, c.ref), { force: true });
+      p.concept = b.concept;
+      const { p: next } = await writeShots(dir, p, { model: p.model });
+      saveProduction(dir, next);
+      writeMeta(dir, { ...readMeta(dir), title: next.title || readMeta(dir).title, cover: null });
+      drawAll(next.shots.map(s => s.id));
+      return send(res, 200, state());
+    }
+    if (M === 'POST' && parts[2] === 'boards') {
+      const b = await body(req), ids = Array.isArray(b.ids) && b.ids.length ? b.ids.filter(x => p.shots.some(s => s.id === x)) : p.shots.map(s => s.id);
+      if (limited(res, req, 'script', true)) return;
+      if (!drawAll(ids)) return send(res, 409, { error: 'The storyboard is already being drawn.' });
+      return send(res, 200, state());
+    }
+    if (M === 'POST' && parts[2] === 'board' && parts[3]) {
+      const shot = p.shots.find(s => s.id === parts[3]);
+      if (!shot) return send(res, 404, { error: 'no such shot' });
+      if (limited(res, req, 'script', true)) return;
+      const b = await body(req);
+      if (STYLES[p.style]?.vertex) await ensureCast(dir).catch(() => {});
+      const r = await drawBoard(dir, readProduction(dir), shot, { note: String(b.note || '').slice(0, 400), model: p.model });
+      const fresh = readProduction(dir), s = fresh.shots.find(x => x.id === shot.id);
+      if (s) { Object.assign(s, { board: r.board, box: r.box, fallback: r.fallback }); fresh.cost = (fresh.cost || 0) + (r.cost || 0); saveProduction(dir, fresh); }
+      return send(res, 200, state());
+    }
+    if (M === 'POST' && parts[2] === 'animatic') {
+      if (!p.shots.length) return send(res, 400, { error: 'Board a concept first.' });
+      const b = await body(req), brand = p.brandId ? readBrand(p.brandId) : null;
+      const film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Animatic: ${p.title || p.brief.slice(0, 60)}`, voice: b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
+      // the film carries its own boards and photos, so it renders on its own
+      for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
+        fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
+        fs.copyFileSync(path.join(dir, s.board), path.join(film.dir, s.board));
+      }
+      if (p.media?.length) fs.cpSync(path.join(dir, 'media'), path.join(film.dir, 'media'), { recursive: true });
+      saveContent(film.dir, animaticScript(p), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
+      writeMeta(film.dir, { ...readMeta(film.dir), production: id });
+      writeMeta(dir, { ...readMeta(dir), animatic: film.id });
+      return send(res, 200, { id: film.id });
+    }
+    return send(res, 404, { error: 'no such route' });
+  }
 
   // a product photo or reference image for a brief: stored once by its content, then referred to by id
   if (M === 'POST' && parts[0] === 'uploads' && !parts[1]) {

@@ -9,7 +9,7 @@ export const FPS = 24;
 const LEAD = 0.35;            // narration starts this long after its scene cuts in
 const TAIL = 0.75;            // breathing room after the last word of a scene
 export const WPS = 2.6;       // words per second used to estimate narration before TTS has run
-const MIN_DUR = { title: 3.2, statement: 3.2, number: 3.6, list: 4.2, compare: 4.2, product: 4.2, end: 3.2 };
+const MIN_DUR = { title: 3.2, statement: 3.2, number: 3.6, list: 4.2, compare: 4.2, product: 4.2, end: 3.2, shot: 0.8 };
 
 // frame-aligned seconds, so visual onsets never fall between frames
 export const fr = t => Math.round(t * FPS) / FPS;
@@ -270,7 +270,8 @@ export function drawPhoto(ctx, m, x, y, w, h, { fit = 'auto', zoom = 1, radius =
 }
 
 // Wire a template into the page contract.
-// tpl = { fonts: [css font strings], minDur(scene, content)?, setup({ ctx, W, H, content, tl, cues, brand, media }), draw(t), events() }
+// tpl = { fonts: [css font strings], minDur(scene, content)?, load(content, { W, H })? (async: anything else the template
+// needs before its first frame), setup({ ctx, W, H, content, tl, cues, brand, media, assets }), draw(t), events() }
 export async function boot(tpl) {
   try {
     const { ctx, W, H } = canvas();
@@ -278,8 +279,8 @@ export async function boot(tpl) {
     const content = await loadContent();
     const tl = timeline(content, tpl.minDur);
     const cues = captions(tl);
-    const [brand, media] = await Promise.all([loadBrand(content), loadMedia(content, W, H)]);
-    tpl.setup({ ctx, W, H, content, tl, cues, brand, media });
+    const [brand, media, assets] = await Promise.all([loadBrand(content), loadMedia(content, W, H), tpl.load ? tpl.load(content, { W, H }) : null]);
+    tpl.setup({ ctx, W, H, content, tl, cues, brand, media, assets });
     const ev = tpl.events().map(e => ({ ...e, t: fr(e.t) }));
     for (const s of tl.scenes) {
       ev.push({ t: s.t0, type: 'scene', i: s.i, kind: s.type, dur: s.dur });

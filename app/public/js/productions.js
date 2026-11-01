@@ -1,0 +1,294 @@
+// Productions (pre-production for ad films and reels): a brief and product references → three concepts → a cast,
+// locations and a storyboard drawn shot by shot → an animatic, which opens in Create as a film to review and export.
+import { $$, h, api, icon, toast, sheet, app, go, pillSelect, segmented } from './core.js';
+import { attachments, dropPhotos, uploading, attachedIds } from './attach.js';
+
+const FORMATS = [
+  ['influencer', 'Influencer reel', 'A creator talks to camera, uses the product, jump cuts and captions.'],
+  ['brand', 'Brand film', 'A cinematic story with characters, ending on the brand.'],
+  ['mascot', 'Mascot story', 'An animated brand creature shows the benefit.'],
+  ['product', 'Product hero', 'The product and the app are the stars.'],
+];
+const ENGINE = { video: ['Scene', '#bf5af2'], presenter: ['Presenter', '#ff9f0a'], code: ['Graphics', '#30d158'], product: ['Product', '#0a84ff'] };
+const SIZES = ['Extreme wide', 'Wide', 'Medium', 'Medium close-up', 'Close-up', 'Extreme close-up', 'Insert', 'Over the shoulder', 'POV', 'Two shot'];
+const MOVES = ['Static', 'Push in', 'Pull out', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Tracking', 'Handheld', 'Orbit', 'Crane up'];
+const LENGTHS = [['15', '15 seconds'], ['30', '30 seconds'], ['45', '45 seconds'], ['60', '60 seconds']];
+const MODELS = [['sonnet', 'Claude Sonnet'], ['opus', 'Claude Opus'], ['haiku', 'Claude Haiku']];
+
+const brief = { brief: '', format: 'brand', kind: 'ad', seconds: '30', aspect: '16:9', brandId: '', model: 'sonnet', style: '', media: [], refs: [], notes: '' };
+let root, P = null, events = null, saveTimer = 0, META = null;
+// frame styles this server can make: Sketch always; Illustrated and Cinematic when Vertex AI is reachable
+const meta = async () => META || (META = await api('productions/meta').catch(() => ({ styles: [{ id: 'sketch', name: 'Sketch' }], vertex: { ok: false } })));
+const styles = () => META.styles.filter(s => !s.vertex || META.vertex.ok);
+
+export function mountProductions(el) { root = el; }
+export async function showProductions(args) {
+  if (!args[0]) return home();
+  if (P?.id !== args[0] || !root.querySelector('.preprod')) await open(args[0]);
+}
+
+// —— home: the brief, and earlier productions ——
+async function home() {
+  stopEvents();
+  P = null;
+  await meta();
+  if (!brief.style || !styles().some(s => s.id === brief.style)) brief.style = META.vertex.ok ? 'illustrated' : 'sketch';
+  brief.brandId = (app.brands || []).some(b => b.id === localStorage.getItem('vg.brand')) ? localStorage.getItem('vg.brand') : '';
+  const ta = h('textarea', { rows: 3, placeholder: 'The brief: the product, who it’s for, the one thing they should feel or do, the offer and the call to action.', 'aria-label': 'Brief', oninput: e => { brief.brief = e.target.value; go_.disabled = !e.target.value.trim(); } });
+  ta.value = brief.brief;
+  const go_ = h('button', { class: 'go', 'aria-label': 'Pitch concepts', title: 'Pitch concepts (⌘↵)', disabled: !brief.brief.trim(), onclick: pitch }, icon('arrowUp', 18));
+  const att = attachments(brief);
+  const bar = h('div', { class: 'prompt-bar' },
+    segmented([{ v: 'ad', label: 'Ad' }, { v: 'reel', label: 'Reel' }, { v: 'film', label: 'Film' }], brief.kind, v => { brief.kind = v; }, { label: 'Runs as' }),
+    pillSelect([['', 'No brand kit'], ...(app.brands || []).map(b => [b.id, b.name])], brief.brandId, v => { brief.brandId = v; localStorage.setItem('vg.brand', v); }, 'Brand kit'),
+    pillSelect(LENGTHS, brief.seconds, v => { brief.seconds = v; }, 'Length'),
+    segmented([{ v: '16:9', icon: 'landscape', label: '16:9' }, { v: '9:16', icon: 'portrait', label: '9:16' }], brief.aspect, v => { brief.aspect = v; }, { label: 'Format' }),
+    pillSelect(styles().map(s => [s.id, `${s.name} frames`]), brief.style, v => { brief.style = v; }, 'Storyboard frames'),
+    pillSelect(MODELS, brief.model, v => { brief.model = v; }, 'Writer'),
+    h('span', { class: 'spacer' }), h('span', { class: 'kbd' }, '⌘↵'), go_);
+  const box = h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta, att, bar));
+  dropPhotos(box, att);
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); pitch(); } });
+  const formats = h('div', { class: 'formats', role: 'radiogroup', 'aria-label': 'Format' }, FORMATS.map(([id, name, line]) =>
+    h('button', { class: 'format' + (brief.format === id ? ' on' : ''), role: 'radio', 'aria-checked': brief.format === id, 'data-id': id, onclick: () => {
+      brief.format = id;
+      if (id === 'influencer') { brief.aspect = '9:16'; brief.kind = brief.kind === 'film' ? 'reel' : brief.kind; return home(); }
+      $$('.format', formats).forEach(c => { c.classList.toggle('on', c.dataset.id === id); c.setAttribute('aria-checked', c.dataset.id === id); });
+    } }, h('b', {}, name), h('span', {}, line))));
+  const list = h('div', { class: 'prod-list' });
+  root.replaceChildren(h('div', { class: 'compose prod-home' },
+    h('div', { class: 'hero' }, h('h1', { class: 'title-xl' }, 'Pre-production.'), h('p', { class: 'sub' }, 'A brief and your product photos in; three concepts, a storyboard and an animatic out.')),
+    h('div', {}, h('div', { class: 'eyebrow' }, 'Format'), formats),
+    box,
+    h('div', {}, h('div', { class: 'section-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Productions'), h('h2', { class: 'title-m' }, 'In progress'))), list)));
+  try {
+    const all = (await api('films')).filter(f => f.mode === 'production');
+    list.replaceChildren(...(all.length ? all.map(card) : [h('p', { class: 'faint' }, 'Nothing yet. Your productions will appear here.')]));
+  } catch {}
+}
+const card = f => h('a', { class: 'prod-card', href: '#productions/' + f.id },
+  h('div', { class: 'sb-frame' + (f.aspect === '9:16' ? ' tall' : '') }, f.cover ? h('img', { src: `/films/${f.id}/${f.cover}`, alt: '' }) : h('span', { class: 'faint' }, 'Concepts')),
+  h('b', {}, f.title || 'Untitled'), h('small', { class: 'faint' }, `${FORMATS.find(x => x[0] === f.format)?.[1] || ''} · ${f.seconds || ''} s · ${f.aspect}`));
+
+// a waiting screen with lines that change while Claude works
+function working(lines, sub) {
+  const line = h('div', { class: 'line' }, lines[0]), clock = h('div', { class: 'faint' }, sub);
+  root.replaceChildren(h('div', { class: 'writing' }, h('div', { class: 'glow active' }, h('div', { class: 'writing-stage' }, h('div', { class: 'orb' }), line, clock))));
+  const t0 = performance.now();
+  let k = 0;
+  const tick = setInterval(() => {
+    const s = Math.round((performance.now() - t0) / 1000);
+    clock.textContent = `${sub} · ${s} s`;
+    if (s && s % 4 === 0) { line.classList.add('out'); setTimeout(() => { line.textContent = lines[++k % lines.length]; line.classList.remove('out'); }, 380); }
+  }, 1000);
+  return () => clearInterval(tick);
+}
+
+async function pitch() {
+  if (!brief.brief.trim()) return toast('Write a brief first.', 'error');
+  if (uploading(brief)) return toast('Still uploading your images…');
+  const done = working([brief.media.length ? 'Looking at your product' : 'Reading the brief', 'Finding three different routes', 'Checking claims against the Proof Library', 'Writing the pitches'], 'Claude is pitching concepts');
+  try {
+    const r = await api('productions', { method: 'POST', body: { ...brief, seconds: +brief.seconds, ...attachedIds(brief) } });
+    Object.assign(brief, { brief: '', media: [], refs: [], notes: '' });
+    P = { id: r.id, ...r };
+    go('productions/' + r.id);
+    render();
+  } catch (e) { toast(e.message, 'error', 10000); home(); }
+  finally { done(); }
+}
+
+// —— a production ——
+async function open(id) {
+  stopEvents();
+  await meta();
+  try {
+    const r = await api('productions/' + id);
+    P = { id, ...r };
+    render();
+    if (r.job?.status === 'running') follow();
+  } catch (e) { toast(e.message, 'error'); go('productions'); }
+}
+async function refresh() {
+  const r = await api('productions/' + P.id);
+  Object.assign(P, r);
+  render();
+}
+
+function render() {
+  const p = P.production, view = p.concept == null ? 'concepts' : 'board';
+  const steps = [['Brief', true], ['Concept', p.concept != null], ['Storyboard', p.shots.some(s => s.board)], ['Animatic', !!P.meta.animatic]];
+  const bar = h('header', { class: 'ed-bar prod-bar' },
+    h('button', { class: 'btn ghost', onclick: () => go('productions') }, icon('chevronL', 15), 'Productions'),
+    h('div', { class: 'ed-title' }, h('input', { value: p.title || P.meta.title || '', 'aria-label': 'Title', oninput: e => { p.title = e.target.value; queueSave(); } }),
+      h('small', {}, `${FORMATS.find(f => f[0] === p.format)?.[1]} · ${p.kind === 'ad' ? 'Ad' : p.kind === 'reel' ? 'Reel' : 'Film'} · ${p.seconds} s · ${p.aspect}${p.brand ? ' · ' + p.brand.name : ''}`)),
+    h('ol', { class: 'steps' }, steps.map(([s, on]) => h('li', { class: on ? 'on' : '' }, s))));
+  root.replaceChildren(h('div', { class: 'preprod' }, bar, view === 'concepts' ? concepts() : board()));
+}
+
+// —— concepts ——
+function concepts() {
+  const p = P.production;
+  const wrap = h('div', { class: 'prod-body' },
+    h('div', { class: 'section-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Step 2'), h('h2', { class: 'title-m' }, 'Pick a concept')),
+      h('button', { class: 'btn ghost', onclick: more }, icon('sparkles', 14), 'Three more')),
+    h('div', { class: 'concepts' }, p.concepts.map((c, i) => h('article', { class: 'concept' },
+      h('div', { class: 'tones' }, c.tone.map(t => h('span', { class: 'chip' }, t))),
+      h('h3', {}, c.name), h('p', { class: 'logline' }, c.logline),
+      h('p', {}, h('b', {}, 'Hook  '), c.hook),
+      h('p', { class: 'muted' }, c.story),
+      h('ol', { class: 'keys' }, c.keyframes.map(k => h('li', {}, k))),
+      h('p', { class: 'why' }, h('b', {}, 'Why it works  '), c.why),
+      /^none\.?$/i.test(c.watchouts.trim()) ? null : h('p', { class: 'watch' }, icon('shield', 13), c.watchouts),
+      h('button', { class: 'btn primary', onclick: () => boardIt(i) }, icon('grid', 14), 'Storyboard this')))));
+  if (p.shots.length && P.was != null) wrap.prepend(h('p', { class: 'faint' }, 'Picking a concept replaces the current storyboard. ', h('a', { href: '#', onclick: e => { e.preventDefault(); p.concept = P.was; render(); } }, 'Back to the storyboard')));
+  return wrap;
+}
+async function more() {
+  const done = working(['Finding new routes', 'Writing the pitches'], 'Claude is pitching three more');
+  try { const r = await api(`productions/${P.id}/concepts`, { method: 'POST', body: {} }); Object.assign(P, r); }
+  catch (e) { toast(e.message, 'error'); }
+  finally { done(); render(); }
+}
+async function boardIt(i) {
+  const done = working(['Casting the characters', 'Scouting the locations', 'Breaking the story into shots', 'Timing the voice-over', 'Checking every claim'], 'Claude is directing');
+  try {
+    const r = await api(`productions/${P.id}/shots`, { method: 'POST', body: { concept: i } });
+    Object.assign(P, r);
+    done();
+    render();
+    follow();
+  } catch (e) { done(); toast(e.message, 'error', 10000); render(); }
+}
+
+// —— storyboard ——
+function board() {
+  const p = P.production, rv = P.review, running = P.job?.status === 'running';
+  const c = p.concepts[p.concept];
+  const warn = Object.fromEntries((rv.shots || []).map(s => [s.id, s.unsupported]));
+  const head = h('div', { class: 'board-head' },
+    h('div', {}, h('div', { class: 'eyebrow' }, 'Step 3 · Storyboard'), h('h2', { class: 'title-m' }, c?.name || 'Storyboard'),
+      h('p', { class: 'muted' }, c?.logline || ''),
+      h('p', { class: 'faint' }, `${p.shots.length} shots · ${rv.total.toFixed(1)} s · shooting estimate about $${Math.round(rv.shoot)} · spent so far $${(p.cost || 0).toFixed(2)}`)),
+    h('div', { class: 'actions' },
+      styles().length > 1 ? segmented(styles().map(s => ({ v: s.id, label: s.name, title: s.vertex ? `Generated by Vertex AI (${META.vertex.model}), about $0.04 a frame` : 'Drawn by Claude as a sketch' })), p.style || 'sketch', restyle, { label: 'Frame style' }) : null,
+      h('button', { class: 'btn ghost', onclick: () => { P.was = p.concept; p.concept = null; render(); } }, 'Change concept'),
+      h('button', { class: 'btn', disabled: running, onclick: redrawAll }, icon('brush', 14), running ? (P.job.step || 'Drawing…') : 'Redraw all'),
+      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.board), onclick: animatic }, icon('film', 15), P.meta.animatic ? 'New animatic' : 'Make the animatic')));
+  const grid = h('div', { class: 'board-grid' + (p.aspect === '9:16' ? ' tall' : '') }, p.shots.map((s, i) => shotCard(s, i, running, warn[s.id] || [])));
+  return h('div', { class: 'prod-body' }, head, castPanel(), grid,
+    P.meta.animatic ? h('p', { class: 'faint' }, 'Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create')) : null);
+}
+function frame(s, cls = '') {
+  const p = P.production, [w, hh] = p.aspect === '9:16' ? [900, 1600] : [1600, 900];
+  const m = s.product >= 0 && p.media?.[s.product];
+  return h('div', { class: 'sb-frame ' + cls + (p.aspect === '9:16' ? ' tall' : '') },
+    s.board ? h('img', { src: `/films/${P.id}/${s.board}`, alt: s.action }) : h('div', { class: 'drawing' }, P.job?.status === 'running' ? 'Drawing…' : 'Not drawn'),
+    s.board && s.box && m ? h('img', { class: 'prod-photo', src: `/films/${P.id}/${m.src}`, alt: 'Product', style: { left: s.box.x / w * 100 + '%', top: s.box.y / hh * 100 + '%', width: s.box.w / w * 100 + '%', height: s.box.h / hh * 100 + '%' } }) : null);
+}
+function shotCard(s, i, running, unsupported) {
+  const [label, color] = ENGINE[s.engine] || ENGINE.video;
+  return h('article', { class: 'shot' + (s.board ? '' : running ? ' pending' : '') },
+    h('button', { class: 'shot-frame', onclick: () => inspect(i), 'aria-label': `Edit shot ${i + 1}` }, frame(s)),
+    h('div', { class: 'shot-meta' }, h('b', {}, String(i + 1).padStart(2, '0')), h('span', {}, `${s.size} · ${s.move} · ${(+s.dur).toFixed(1)} s`),
+      h('i', { class: 'engine', style: { '--c': color } }, label)),
+    s.vo ? h('p', { class: 'vo' }, icon('wave', 12), s.vo) : null,
+    s.super ? h('p', { class: 'super' }, '“', s.super, '”') : null,
+    unsupported.length ? h('p', { class: 'warn' }, icon('shield', 12), `Not backed by the Proof Library: ${unsupported.join(', ')}`) : null,
+    s.fallback ? h('p', { class: 'faint' }, `Drawn as a sketch: ${s.fallback}`) : null);
+}
+
+function castPanel() {
+  const p = P.production;
+  if (!p.cast.length && !p.locations.length) return null;
+  const item = (o, kind) => h('div', { class: 'cast-item' },
+    o.ref ? h('img', { class: 'cast-ref', src: `/films/${P.id}/${o.ref}`, alt: `${o.name}, reference portrait` }) : null,
+    h('b', {}, o.name), h('small', { class: 'faint' }, kind),
+    h('textarea', { rows: 3, 'aria-label': `${o.name} look`, oninput: e => { o.look = e.target.value; queueSave(); } }, o.look),
+    o.wardrobe != null ? h('small', { class: 'faint' }, 'Wears ' + o.wardrobe) : null);
+  return h('details', { class: 'cast-panel' }, h('summary', {}, icon('eye', 13), `Cast & locations · ${p.cast.length + p.locations.length}`, h('small', { class: 'faint' }, '  Edit a look, then redraw the frames it appears in.')),
+    h('div', { class: 'cast-grid' }, p.cast.map(c => item(c, 'Character')), p.locations.map(l => item(l, 'Location'))));
+}
+
+// the shot inspector: edit, redraw with a note, move, insert, delete
+function inspect(i) {
+  const p = P.production, s = p.shots[i];
+  sheet(close => {
+    const field = (label, el) => h('label', { class: 'field' }, h('span', {}, label), el);
+    const sel = (opts, v, set) => pillSelect(opts.map(o => Array.isArray(o) ? o : [o, o]), v, set);
+    const note = h('input', { placeholder: 'Note for the redraw, e.g. lower angle, she smiles, more of the city', 'aria-label': 'Redraw note' });
+    const redraw = h('button', { class: 'btn', onclick: async () => {
+      redraw.disabled = true; redraw.textContent = 'Drawing…';
+      try { await save(true); const r = await api(`productions/${P.id}/board/${s.id}`, { method: 'POST', body: { note: note.value } }); Object.assign(P, r); close(); render(); }
+      catch (e) { toast(e.message, 'error'); redraw.disabled = false; redraw.textContent = 'Redraw frame'; }
+    } }, icon('brush', 14), 'Redraw frame');
+    const edit = (k, v) => { s[k] = v; queueSave(); };
+    return h('div', { class: 'sheet-body shot-sheet' },
+      h('div', { class: 'eyebrow' }, `Shot ${i + 1} of ${p.shots.length}`),
+      h('div', { class: 'shot-edit' }, frame(s, 'big'),
+        h('div', { class: 'shot-fields' },
+          h('div', { class: 'row2' }, field('Size', sel(SIZES, s.size, v => edit('size', v))), field('Camera', sel(MOVES, s.move, v => edit('move', v)))),
+          h('div', { class: 'row2' }, field('Angle', h('input', { value: s.angle, oninput: e => edit('angle', e.target.value) })),
+            field('Seconds', h('input', { type: 'number', min: 0.5, max: 12, step: 0.5, value: s.dur, oninput: e => edit('dur', +e.target.value) }))),
+          h('div', { class: 'row2' }, field('Made with', sel(Object.entries(ENGINE).map(([k, [l]]) => [k, l]), s.engine, v => edit('engine', v))),
+            p.media?.length ? field('Product photo', sel([[-1, 'None'], ...p.media.map((m, k) => [k, `Photo ${k + 1}`])], s.product, v => edit('product', +v))) : null),
+          field('Action', h('textarea', { rows: 3, oninput: e => edit('action', e.target.value) }, s.action)),
+          field('Voice-over', h('textarea', { rows: 2, oninput: e => edit('vo', e.target.value) }, s.vo)),
+          field('On-screen text', h('input', { value: s.super, oninput: e => edit('super', e.target.value) })))),
+      h('div', { class: 'actions' }, note, redraw),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost', disabled: i === 0, onclick: () => { p.shots.splice(i - 1, 0, p.shots.splice(i, 1)[0]); close(); save(true).then(render); } }, icon('chevronL', 14), 'Earlier'),
+        h('button', { class: 'btn ghost', disabled: i === p.shots.length - 1, onclick: () => { p.shots.splice(i + 1, 0, p.shots.splice(i, 1)[0]); close(); save(true).then(render); } }, 'Later', icon('chevronR', 14)),
+        h('button', { class: 'btn ghost', onclick: () => { p.shots.splice(i + 1, 0, { ...s, id: 'new', board: null, box: null, action: 'New shot: describe what we see.', vo: '', super: '' }); close(); save(true).then(() => { render(); inspect(i + 1); }); } }, icon('plus', 14), 'Add a shot after'),
+        h('span', { class: 'spacer' }),
+        h('button', { class: 'btn ghost danger', disabled: p.shots.length <= 2, onclick: () => { p.shots.splice(i, 1); close(); save(true).then(render); } }, 'Delete shot')));
+  }, { wide: true, onClose: () => save(true).then(render) });
+}
+
+// —— saving and drawing ——
+function queueSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => save(), 600); }
+async function save(now = false) {
+  clearTimeout(saveTimer);
+  const p = P.production;
+  try {
+    const r = await api('productions/' + P.id, { method: 'PUT', body: { title: p.title, cast: p.cast, locations: p.locations, shots: p.shots } });
+    if (now) Object.assign(P, r); else P.review = r.review;
+  } catch (e) { toast(e.message, 'error'); }
+}
+// a new frame style: save it, then redraw every frame in it
+async function restyle(style) {
+  P.production.style = style;
+  try { await api('productions/' + P.id, { method: 'PUT', body: { style } }); } catch (e) { toast(e.message, 'error'); return render(); }
+  redrawAll();
+}
+async function redrawAll() {
+  await save(true);
+  try { const r = await api(`productions/${P.id}/boards`, { method: 'POST', body: {} }); Object.assign(P, r); render(); follow(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+// frames land one by one: refetch as each is reported
+function follow() {
+  stopEvents();
+  P.job = { status: 'running', step: 'Drawing…' };
+  render();
+  events = new EventSource(`/api/films/${P.id}/events`);
+  let pending = 0;
+  events.onmessage = e => {
+    const d = JSON.parse(e.data);
+    P.job = { status: d.status, step: d.step, pct: d.pct };
+    clearTimeout(pending);
+    pending = setTimeout(() => refresh().catch(() => {}), 150);
+    if (d.status !== 'running') { stopEvents(); if (d.status === 'failed') toast(d.error || 'Drawing failed', 'error'); }
+  };
+  events.onerror = () => { stopEvents(); refresh().catch(() => {}); };
+}
+function stopEvents() { if (events) { events.close(); events = null; } }
+
+async function animatic() {
+  await save(true);
+  try {
+    const r = await api(`productions/${P.id}/animatic`, { method: 'POST', body: {} });
+    toast('Animatic ready. Play it, adjust the voice or timing, then export.', 'ok');
+    go('create/' + r.id);
+  } catch (e) { toast(e.message, 'error'); }
+}

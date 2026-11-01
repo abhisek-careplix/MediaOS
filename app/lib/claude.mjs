@@ -53,7 +53,7 @@ function scriptSchema(tpl, photos = 0, seconds = 30, kind = 'film') {
 }
 
 // what each format asks of the script, on top of the scene rules
-const KIND = {
+export const KIND = {
   film: { what: 'short film', rules: '' },
   ad: { what: 'paid social video ad (Meta and TikTok)', rules: `
 - It is an ad: the first scene is the hook. Its text must stop the scroll in under two seconds (a sharp benefit, a surprising fact the user gave, or a tension), not the brand name or a generic welcome.
@@ -118,11 +118,13 @@ function runClaude(args, { cwd, timeout = 300000 } = {}) {
 }
 
 // one structured-output call: returns the object matching schema, or throws with a readable reason
-export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 240000 } = {}) {
+// files: [{ src, name }] copied into Claude's empty working folder; with any, Claude gets the Read tool to look at them
+export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 240000, files = [] } = {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'videogen-'));
   try {
+    for (const f of files) fs.copyFileSync(f.src, path.join(cwd, path.basename(f.name)));
     const { out, err } = await runClaude(['-p', prompt, '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', model,
-      '--tools', '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'], { cwd, timeout });
+      '--tools', files.length ? 'Read' : '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'], { cwd, timeout });
     let res;
     try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 400)); }
     if (res.is_error) {

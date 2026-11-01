@@ -22,6 +22,16 @@ export const TEMPLATES = {
     bpm: 104,
     librarySlug: 'dark-keynote',
   },
+  // internal: pre-production's animatic (storyboard frames timed to a temp voice); never offered in Create
+  animatic: {
+    id: 'animatic',
+    name: 'Animatic',
+    blurb: 'Storyboard frames timed to a temp voice and music.',
+    brief: '',
+    accents: ['#0a84ff'],
+    bpm: 96,
+    hidden: true,
+  },
 };
 
 export const VOICES = [
