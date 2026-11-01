@@ -40,11 +40,14 @@ export const VOICES = [
   ['bf_emma', 'Emma (UK, female)'], ['bf_isabella', 'Isabella (UK, female)'], ['bm_george', 'George (UK, male)'], ['bm_daniel', 'Daniel (UK, male)'],
 ];
 
+// library styles we don't offer: Living Screencast's demo is about another company's product
+export const HIDDEN_STYLES = new Set(['living-screencast']);
+
 // every library style, for director mode
 export function libraryStyles() {
   const dir = path.join(LIB, 'styles');
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter(s => !s.startsWith('_')).map(slug => {
+  return fs.readdirSync(dir).filter(s => !s.startsWith('_') && !HIDDEN_STYLES.has(s)).map(slug => {
     try {
       const j = JSON.parse(fs.readFileSync(path.join(dir, slug, 'style.json'), 'utf8'));
       return { slug, name: j.en, category: j.category_en, line: j.line };

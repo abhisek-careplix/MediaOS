@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex">
-<title>Sign in · VideoGen Studio</title>
+<title>Sign in · CarePlix Studio</title>
+<link rel="icon" href="/img/careplix-mark.png">
+<link rel="apple-touch-icon" href="/img/careplix-mark.png">
 <link rel="stylesheet" href="/css/studio.css">
 <style>
   body { overflow: hidden; }
@@ -16,22 +18,24 @@
   @keyframes drift { to { transform: translateY(-50%); } }
   .veil { position: fixed; inset: 0; background: radial-gradient(60% 70% at 50% 50%, rgba(10, 10, 12, .55), rgba(10, 10, 12, .94) 70%); }
   .center { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; }
-  .card { width: min(420px, 100%); padding: 40px 36px 30px; border-radius: 28px; background: rgba(28, 28, 32, .62); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%); border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 40px 120px rgba(0, 0, 0, .6); text-align: center; display: grid; gap: 18px; animation: rise .8s cubic-bezier(.2, .8, .2, 1); }
+  .card { width: min(420px, 100%); padding: 44px 36px 28px; border-radius: 28px; background: rgba(255, 255, 255, .97); color: #1d1d1f; border: 1px solid rgba(255, 255, 255, .7); box-shadow: 0 40px 120px rgba(0, 0, 0, .6); text-align: center; display: grid; gap: 18px; animation: rise .8s cubic-bezier(.2, .8, .2, 1); }
   @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(.98); } }
-  .mark { width: 64px; height: 64px; border-radius: 18px; margin: 0 auto 4px; }
-  .mark::after { inset: 17px 14px 17px 24px; }
-  h1 { margin: 0; font-size: 30px; letter-spacing: -.02em; }
-  .lead { margin: -8px 0 6px; color: var(--text2); font-size: 15px; }
-  .google { display: flex; align-items: center; justify-content: center; gap: 12px; height: 48px; border-radius: 980px; background: #fff; color: #1f1f1f; font: 500 15px/1 -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif; text-decoration: none; transition: transform .2s cubic-bezier(.34, 1.4, .64, 1), box-shadow .2s; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
-  .google:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
-  .google:active { transform: scale(.98); }
-  .google svg { width: 20px; height: 20px; }
-  .who { color: var(--text3); font-size: 12.5px; }
-  .who b { color: var(--text2); font-weight: 600; }
+  h1 { margin: 0; display: grid; justify-items: center; gap: 10px; }
+  h1 img { height: 42px; width: auto; display: block; }
+  h1 span { font-size: 12.5px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; color: #6e6e73; padding-left: .34em; }
+  .lead { margin: -2px 0 8px; color: #6e6e73; font-size: 15px; line-height: 1.45; }
+  /* "Sign in with CarePlix", shaped like the familiar sign-in buttons; it starts the Google sign-in for CarePlix accounts */
+  .signin { display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; border-radius: 980px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font: 500 15.5px/1 -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif; text-decoration: none; transition: transform .2s cubic-bezier(.34, 1.4, .64, 1), box-shadow .2s, background .2s; }
+  .signin:hover { background: #f8f9fb; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(16, 24, 40, .14); }
+  .signin:active { transform: scale(.98); }
+  .signin:focus-visible { outline: 3px solid rgba(47, 151, 240, .45); outline-offset: 2px; }
+  .signin img { height: 19px; width: auto; display: block; margin-top: 1px; }
+  .who { color: #86868b; font-size: 12.5px; line-height: 1.5; }
+  .who b { color: #3a3a3c; font-weight: 600; }
   .msg { border-radius: 14px; padding: 11px 14px; font-size: 13px; text-align: left; display: flex; gap: 10px; align-items: flex-start; }
-  .msg.err { background: rgba(255, 69, 58, .12); color: #ffb4ae; border: 1px solid rgba(255, 69, 58, .25); }
-  .msg.ok { background: rgba(48, 209, 88, .1); color: #a6f0bb; border: 1px solid rgba(48, 209, 88, .2); }
-  .foot { color: var(--text3); font-size: 11px; margin-top: 4px; }
+  .msg.err { background: #fff1f0; color: #b42318; border: 1px solid #fecdca; }
+  .msg.ok { background: #ecfdf3; color: #067647; border: 1px solid #abefc6; }
+  .foot { color: #a1a1a6; font-size: 11px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -39,15 +43,13 @@
 <div class="veil" aria-hidden="true"></div>
 <main class="center">
   <div class="card">
-    <span class="brand-mark mark" aria-hidden="true"></span>
-    <h1>VideoGen Studio</h1>
-    <p class="lead">Films made in code, directed by Claude.</p>
+    <h1><img src="/img/careplix-logo.png" alt="CarePlix"><span>Studio</span></h1>
+    <p class="lead">Films, decks and storyboards for CarePlix.</p>
     <div id="msg" hidden></div>
-    <a class="google" id="go" href="/auth/google">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-      Sign in with Google
+    <a class="signin" id="go" href="/auth/google" aria-label="Sign in with CarePlix">
+      <span>Sign in with</span><img src="/img/careplix-logo.png" alt="">
     </a>
-    <div class="who" id="who">For CarePlix Google accounts only.</div>
+    <div class="who" id="who">For CarePlix accounts only.</div>
     <div class="foot">Style frames: Lemo-Opuscar by LemoLab, CC BY 4.0</div>
   </div>
 </main>
@@ -74,7 +76,7 @@
     if (i.domains?.length) {
       const who = document.getElementById('who');
       who.textContent = '';
-      who.append('For ', ...i.domains.flatMap((d, k) => [k ? ' or ' : '', Object.assign(document.createElement('b'), { textContent: '@' + d })]), ' Google accounts only.');
+      who.append('Use your ', ...i.domains.flatMap((d, k) => [k ? ' or ' : '', Object.assign(document.createElement('b'), { textContent: '@' + d })]), ' work account. Google confirms it’s you.');
     }
   }).catch(() => {});
   const MSG = {

@@ -1,4 +1,4 @@
-/* VideoGen Studio — dark, cinematic, content first. */
+/* CarePlix Studio — dark, cinematic, content first. */
 :root {
   --bg: #0a0a0c;
   --bg1: #121215;
@@ -44,10 +44,10 @@ code { font: 12px var(--mono); background: var(--fill); padding: 1px 5px; border
 .app { display: grid; grid-template-columns: 228px minmax(0, 1fr); height: 100vh; }
 .sidebar { background: rgba(22, 22, 26, .78); backdrop-filter: saturate(160%) blur(30px); border-right: 1px solid var(--sep); display: flex; flex-direction: column; padding: 18px 12px; gap: 22px; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 4px 8px; }
-.brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
-.brand small { display: block; color: var(--text3); font-size: 11px; margin-top: -2px; }
-.brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--glow); position: relative; animation: spinA 8s linear infinite; box-shadow: 0 4px 18px rgba(94, 92, 230, .35); }
-.brand-mark::after { content: ""; position: absolute; inset: 7px 6px 7px 10px; background: #fff; clip-path: polygon(0 0, 100% 50%, 0 100%); border-radius: 2px; }
+.brand-badge { display: inline-flex; align-items: center; background: #fff; border-radius: 9px; padding: 7px 10px; box-shadow: 0 4px 18px rgba(0, 0, 0, .28); }
+.brand-logo { display: block; height: 17px; width: auto; }
+.brand-icon { display: none; width: 30px; height: 30px; }
+.brand-name { font-size: 15px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
 @keyframes spinA { to { --a: 360deg; } }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--text2); font-weight: 500; position: relative; transition: background .2s var(--ease), color .2s; }
@@ -595,7 +595,9 @@ details.hood pre { margin: 10px 0 0; max-height: 360px; overflow: auto; backgrou
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { flex-direction: row; padding: 8px 12px; align-items: center; position: sticky; top: 0; z-index: 5; }
-  .brand div, .side-foot { display: none; }
+  .brand-name, .brand-logo, .side-foot { display: none; }
+  .brand-badge { padding: 0; background: none; box-shadow: none; }
+  .brand-icon { display: block; }
   .nav { flex-direction: row; }
   .studio { grid-template-columns: 1fr; }
   .prods { display: none; }

@@ -45,7 +45,7 @@ export function attachments(state) {
       ...state.media.map((a, i) => tile(a, 'media', `Product ${i + 1}`)),
       ...state.refs.map((a, i) => tile(a, 'refs', `Ref ${i + 1}`)),
       h('button', { class: 'chip', onclick: () => pick('media'), title: 'Product photos are shown in the piece' }, icon('photo', 13), 'Product photo'),
-      h('button', { class: 'chip', onclick: () => pick('refs'), title: 'References guide Claude (an example ad, a landing page, a brand guide) but are not shown' }, icon('eye', 13), 'Reference'),
+      h('button', { class: 'chip', onclick: () => pick('refs'), title: 'References guide the writing (an example ad, a landing page, a brand guide) but aren’t shown' }, icon('eye', 13), 'Reference'),
       h('button', { class: 'chip' + (open ? ' on' : ''), onclick: () => { notesOpen = !open; if (!notesOpen) state.notes = ''; paint(); } }, icon('pencil', 13), 'Notes'),
       ...(open ? [notes] : []));
   }

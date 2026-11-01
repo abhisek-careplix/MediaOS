@@ -15,17 +15,19 @@ const IMG = /([\w./~-]+\.(?:jpe?g|png))/i;
 export function classify(line, st) {
   const m = /^▸ (\w+)(?::\s?(.*))?$/s.exec(line);
   if (!m) {
-    if (/^(Starting Claude|── )/.test(line)) return { kind: 'system', label: line.replace(/^── /, '') };
+    if (/^(Starting the director|Starting Claude|── )/.test(line)) return { kind: 'system', label: line.replace(/^── /, '').replace(/^Starting Claude.*/, 'Starting the director…') };
     if (/^Finished:/.test(line)) { const c = /\$([\d.]+)/.exec(line); return { kind: 'finish', cost: c ? +c[1] : null }; }
     if (/^(Error:|Cancelled\.)/.test(line)) return { kind: 'error', label: line };
     return { kind: 'note', text: line };
   }
   const [, tool, arg = ''] = m;
   const late = st.max >= SI.render;
+  // commands as people read them: paths inside the film or the style library, without the server's folders
+  const brief = s => s.replace(/(?:\/[\w.@-]+)+\/films\/[\w-]+\//g, '').replace(/(?:\/[\w.@-]+)*\/lemo-opuscar\//g, '').replace(/\s+/g, ' ').slice(0, 90);
   const file = (/([\w.-]+\.\w+)(?=\s|$|['"])/.exec(arg.split(/\s+/).find(w => /\.\w{1,5}$/.test(w)) || '') || [])[1] || arg.split('/').pop().slice(0, 60);
   const a = arg;
   const r = (stage, label, ic, extra = {}) => ({ kind: 'tool', tool, arg, stage, label, icon: ic, ...extra });
-  if (tool === 'Skill') return r('brief', 'Opening the lemo-opuscar playbook', 'book');
+  if (tool === 'Skill') return r('brief', 'Opening the Lemo-Opuscar playbook', 'book');
   if (tool === 'TodoWrite') return r(null, 'Planning the next steps', 'sliders');
   if (tool === 'WebSearch' || tool === 'WebFetch') return r(st.max < SI.treatment ? 'treatment' : null, 'Researching sources', 'globe', { detail: a });
   if (/setup\.sh[^|]*\bdemo\b/.test(a)) return r('treatment', 'Studying the style’s demo techniques', 'book');
@@ -53,8 +55,8 @@ export function classify(line, st) {
   if (/Write|Edit/.test(tool)) return r(null, 'Writing ' + file, 'pencil', { detail: file });
   if (tool === 'Read') return r(null, 'Reading ' + file, 'doc', { detail: file });
   if (tool === 'Glob' || tool === 'Grep') return r(null, 'Searching the project', 'search');
-  if (tool === 'Bash') return r(null, 'Running a command', 'terminal', { detail: a.slice(0, 90) });
-  return r(null, tool, 'cpu', { detail: a.slice(0, 90) });
+  if (tool === 'Bash') return r(null, 'Running a command', 'terminal', { detail: brief(a) });
+  return r(null, tool, 'cpu', { detail: brief(a) });
 }
 
 let root, current = null, es = null, filesTimer = 0, clockTimer = 0;
@@ -117,19 +119,19 @@ async function composer(el, preset) {
     } catch (e) { toast(e.message, 'error'); start.disabled = false; }
   } }, icon('clapper', 16), 'Start production');
   el.append(h('div', { class: 'composer' },
-    h('div', {}, h('div', { class: 'eyebrow' }, 'Director mode'), h('h1', { class: 'title-l' }, 'New production'), h('p', { class: 'sub' }, 'Claude directs a complete film in any of the library’s styles: treatment, drawing code, voice, score, mix and a self-check.')),
+    h('div', {}, h('div', { class: 'eyebrow' }, 'Director mode'), h('h1', { class: 'title-l' }, 'New production'), h('p', { class: 'sub' }, 'A complete film in any of the library’s styles, directed for you: treatment, drawing code, voice, score, mix and a self-check.')),
     h('div', { class: 'field' }, h('span', {}, 'Style'), pick),
     h('div', { class: 'field' }, h('span', {}, 'The film'), h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta))),
     h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' } },
       segmented([['30'], ['45'], ['60'], ['90']].map(([v]) => ({ v, label: v + ' s' })), st.seconds, v => { st.seconds = v; }, { label: 'Length' }),
       segmented([{ v: '16:9', icon: 'landscape', label: '16:9' }, { v: '9:16', icon: 'portrait', label: '9:16' }], st.aspect, v => { st.aspect = v; }, { label: 'Format' }),
-      pillSelect([['opus', 'Claude Opus (recommended)'], ['sonnet', 'Claude Sonnet (cheaper)']], st.model, v => { st.model = v; }, 'Director model'),
+      pillSelect([['opus', 'Best director (recommended)'], ['sonnet', 'Faster director (cheaper)']], st.model, v => { st.model = v; }, 'Director'),
       pillSelect([['', 'No brand kit'], ...(app.brands || []).map(b => [b.id, b.name])], st.brandId, v => { st.brandId = v; }, 'Brand kit')),
     h('label', { class: 'field' }, h('span', {}, 'Notes for the director (optional)'), h('input', { placeholder: 'e.g. warm British female voice, no music under the opening line', oninput: e => { st.notes = e.target.value; } })),
     app.me && !app.me.canDirect ? h('div', { class: 'callout' }, icon('info', 18), h('div', {}, app.me.open
       ? [h('b', {}, 'Director mode is off on the public site. '), 'It runs an agent with shell access and costs a few dollars per film, so it needs sign-in. Instant films in Create work as usual.']
       : [h('b', {}, 'Director mode isn’t available to you on this server. '), 'Instant films in Create work as usual; ask an admin for access.'])) : null,
-    h('div', { class: 'callout' }, icon('info', 18), h('div', {}, h('b', {}, 'Takes 15–60 minutes. '), 'Our 30-second test took 17 minutes and $4.17 on Opus. Claude works headless inside ', h('code', {}, 'films/<id>/'), ', can’t ask you questions, and fills gaps with sensible defaults. You can watch every step here.')),
+    h('div', { class: 'callout' }, icon('info', 18), h('div', {}, h('b', {}, 'Takes 15–60 minutes. '), 'A 30-second test took 17 minutes and about $4 with the best director. It works on its own inside ', h('code', {}, 'films/<id>/'), ', can’t ask you questions, and fills gaps with sensible defaults. You can watch every step here.')),
     h('div', {}, start)));
   setTimeout(() => ta.focus(), 50);
 }
@@ -140,10 +142,10 @@ function board(el, meta) {
   const S = current = { id: meta.id, meta, max: -1, now: null, images: [], seen: new Set(), docMap: new Map(), notes: 0, tools: 0, writes: 0, looks: 0, cost: meta.cost, status: meta.status, elapsed: meta.seconds || 0, base: Date.now() };
   const pill = h('span', { class: 'badge' });
   const clock = h('span', { class: 'clock' }, '0:00');
-  const cancelBtn = h('button', { class: 'btn ghost danger', onclick: async () => { if (confirm('Stop this production? Claude will stop where it is.')) await api(`films/${meta.id}/cancel`, { method: 'POST' }); } }, icon('stop', 14), 'Stop');
+  const cancelBtn = h('button', { class: 'btn ghost danger', onclick: async () => { if (confirm('Stop this production? It will stop where it is.')) await api(`films/${meta.id}/cancel`, { method: 'POST' }); } }, icon('stop', 14), 'Stop');
   const railBar = h('div', { class: 'bar' });
   const rail = h('div', { class: 'rail' }, railBar, STAGES.map(([id, name, ic]) => h('div', { class: 'stage', 'data-id': id }, h('span', { class: 'node' }, icon(ic, 15)), h('span', {}, name))));
-  const monitor = h('div', { class: 'monitor' }, h('div', { class: 'idle' }, h('div', { class: 'orb' }), h('span', {}, 'Frames appear here as Claude draws and reviews them.')));
+  const monitor = h('div', { class: 'monitor' }, h('div', { class: 'idle' }, h('div', { class: 'orb' }), h('span', {}, 'Frames appear here as they’re drawn and reviewed.')));
   const nowCard = h('div', { class: 'now-card' });
   const stats = h('div', { class: 'stats' });
   const notes = h('div', { class: 'notes-list' });
@@ -153,7 +155,7 @@ function board(el, meta) {
   const titleEl = h('h2', {}, meta.filmTitle || (meta.prompt || s.name || meta.style).slice(0, 70));
   el.append(h('div', { class: 'board' },
     h('div', { class: 'board-head' }, s.frame ? h('img', { class: 'thumb', src: s.frame, alt: '' }) : null,
-      h('div', { class: 'grow' }, titleEl, h('div', { class: 'meta' }, pill, h('span', {}, `${s.name} · ${meta.aspect || '16:9'} · ${meta.model || 'opus'}`), clock)),
+      h('div', { class: 'grow' }, titleEl, h('div', { class: 'meta' }, pill, h('span', {}, `${s.name} · ${meta.aspect || '16:9'} · ${(meta.model || 'opus') === 'opus' ? 'best director' : 'faster director'}`), clock)),
       cancelBtn),
     rail,
     h('div', { class: 'board-grid' },
@@ -228,7 +230,7 @@ function paintRail(S) {
 function paintNow(c, S = current, idle = false) {
   const stage = c.stage ? STAGES[SI[c.stage]][1] : S && S.max >= 0 ? STAGES[S.max][1] : '';
   S.nowCard.replaceChildren(
-    h('div', { class: 'eyebrow' }, idle ? 'Status' : 'Claude is…'),
+    h('div', { class: 'eyebrow' }, idle ? 'Status' : 'Working on…'),
     h('div', { class: 'act' + (idle || S.status !== 'running' ? ' idle' : '') }, h('span', { class: 'ico' }, icon(c.icon || 'sparkles', 20)),
       h('div', { style: { minWidth: 0 } }, h('b', {}, c.label), h('small', {}, [stage, c.detail].filter(Boolean).join(' · ')))));
 }
@@ -282,8 +284,7 @@ function finish(S) {
     h('span', { class: 'badge done tally' }, icon('check', 11), 'Final cut'));
   const actions = h('div', { class: 'actions' },
     h('a', { class: 'btn white', href: src, download: S.output.split('/').pop() }, icon('download', 15), 'Download MP4'),
-    h('a', { class: 'btn', href: src.replace(/\.mp4$/, '.srt'), download: true }, 'Subtitles'),
-    h('span', { class: 'pathline' }, `${app.cfg.films}/${S.id}/${S.output}`));
+    h('a', { class: 'btn', href: src.replace(/\.mp4$/, '.srt'), download: true }, 'Subtitles'));
   S.monitor.insertAdjacentElement('afterend', actions);
 }
 

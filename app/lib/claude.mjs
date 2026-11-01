@@ -16,6 +16,12 @@ const KEEP = ['PATH', 'HOME', 'USER', 'SHELL', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM
 const childEnv = () => authOn() ? Object.fromEntries(KEEP.filter(k => process.env[k] != null).map(k => [k, process.env[k]])) : process.env;
 
 const CLAUDE = process.env.CLAUDE_BIN || 'claude';
+// people see plain wording, never a provider's name; the setup hint for whoever runs the server goes to the log
+const plain = msg => String(msg).replace(/\bclaude code\b/gi, 'the AI writer').replace(/\bclaude\b/gi, 'the AI writer').replace(/\banthropic\b/gi, 'the AI provider');
+function notSignedIn() {
+  console.error('[ai] Claude Code is not signed in: run `claude auth login` (or set ANTHROPIC_API_KEY), then try again.');
+  return new Error('The AI writer isn’t signed in on this server. Ask whoever runs it to sign it in.');
+}
 
 // photos: how many product photos the brief carries (product scenes show them by index); every scene needs ~4 s to
 // land, so a 15-second cut gets at most 4 scenes and a fast tempo
@@ -109,10 +115,11 @@ function runClaude(args, { cwd, timeout = 300000 } = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(CLAUDE, args, { cwd, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '';
-    const timer = setTimeout(() => { p.kill('SIGTERM'); reject(new Error('Claude took too long to answer')); }, timeout);
+    const timer = setTimeout(() => { p.kill('SIGTERM'); reject(new Error('The AI writer took too long to answer. Try again.')); }, timeout);
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; });
-    p.on('error', e => { clearTimeout(timer); reject(e.code === 'ENOENT' ? new Error('The `claude` command was not found. Install Claude Code (brew install --cask claude-code).') : e); });
+    p.on('error', e => { clearTimeout(timer); if (e.code === 'ENOENT') console.error('[ai] The `claude` command was not found: brew install --cask claude-code');
+      reject(e.code === 'ENOENT' ? new Error('The AI writer isn’t installed on this server.') : e); });
     p.on('close', code => { clearTimeout(timer); resolve({ code, out, err }); });
   });
 }
@@ -126,14 +133,14 @@ export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 2400
     const { out, err } = await runClaude(['-p', prompt, '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', model,
       '--tools', files.length ? 'Read' : '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'], { cwd, timeout });
     let res;
-    try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 400)); }
+    try { res = JSON.parse(out); } catch { throw new Error(plain((err || out || 'The AI writer returned nothing. Try again.').trim().slice(0, 400))); }
     if (res.is_error) {
       const msg = String(res.result || res.subtype || 'error');
-      throw new Error(/log ?in/i.test(msg) ? 'Claude Code is not logged in. Run `claude auth login` (or set ANTHROPIC_API_KEY), then try again.' : msg);
+      throw /log ?in/i.test(msg) ? notSignedIn() : new Error(plain(msg));
     }
     let obj = res.structured_output;
     if (!obj && typeof res.result === 'string') { const m = res.result.match(/\{[\s\S]*\}/); if (m) obj = JSON.parse(m[0]); }
-    if (!obj) throw new Error('Claude did not return the expected structure');
+    if (!obj) throw new Error('The AI writer’s answer was incomplete. Try again.');
     return { data: obj, cost: res.total_cost_usd, ms: res.duration_ms };
   } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
 }
@@ -152,17 +159,17 @@ export async function writeScript({ prompt, template, seconds = 30, aspect = '16
       '--tools', photos.length || looks.length ? 'Read' : '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
     const { out, err } = await runClaude(args, { cwd, timeout: photos.length || looks.length ? 420000 : 300000 });
     let res;
-    try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 400)); }
+    try { res = JSON.parse(out); } catch { throw new Error(plain((err || out || 'The AI writer returned nothing. Try again.').trim().slice(0, 400))); }
     if (res.is_error) {
       const msg = String(res.result || res.subtype || 'error');
-      throw new Error(/log ?in/i.test(msg) ? 'Claude Code is not logged in. Run `claude` in a terminal and use /login (or set ANTHROPIC_API_KEY), then try again.' : msg);
+      throw /log ?in/i.test(msg) ? notSignedIn() : new Error(plain(msg));
     }
     let script = res.structured_output;
     if (!script && typeof res.result === 'string') {
       const m = res.result.match(/\{[\s\S]*\}/);
       if (m) script = JSON.parse(m[0]);
     }
-    if (!script?.scenes?.length) throw new Error('Claude did not return a scene script');
+    if (!script?.scenes?.length) throw new Error('The AI writer didn’t return a script. Try again.');
     for (const s of script.scenes) if (s.type === 'product' && !(s.image >= 0 && s.image < photos.length)) s.image = 0;
     return { script, cost: res.total_cost_usd, ms: res.duration_ms };
   } finally {
@@ -199,8 +206,8 @@ ${examples}`;
     const { out, err } = await runClaude(['-p', text, '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', model,
       '--tools', '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'], { cwd, timeout: 120000 });
     let res;
-    try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 300)); }
-    if (res.is_error) throw new Error(/log ?in/i.test(String(res.result)) ? 'Claude Code is not logged in. Run `claude auth login` in a terminal.' : String(res.result));
+    try { res = JSON.parse(out); } catch { throw new Error(plain((err || out || 'The AI writer returned nothing. Try again.').trim().slice(0, 300))); }
+    if (res.is_error) throw /log ?in/i.test(String(res.result)) ? notSignedIn() : new Error(plain(res.result));
     const kit = res.structured_output || JSON.parse((String(res.result).match(/\{[\s\S]*\}/) || ['{}'])[0]);
     return { ...kit, source: 'generated', cost: res.total_cost_usd };
   } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
@@ -235,7 +242,7 @@ export async function runDirector(job, opts) {
   const args = ['-p', directorBrief(opts), '--output-format', 'stream-json', '--verbose',
     '--permission-mode', process.env.DIRECTOR_PERMISSION_MODE || 'auto', '--disallowedTools', 'AskUserQuestion',
     '--add-dir', LIB, '--model', opts.model || 'opus'];
-  emit(job, { step: 'Directing', pct: 2 }, `Starting Claude (${opts.model || 'opus'}) with the lemo-opuscar skill…`);
+  emit(job, { step: 'Directing', pct: 2 }, `Starting the director with the Lemo-Opuscar style library…`);
   let turns = 0, final = null;
   const onLine = line => {
     if (!line.trim()) return;
@@ -276,13 +283,13 @@ export async function runDirector(job, opts) {
   job.proc = null;
   if (job.cancelled) return;
   if (!final || final.is_error) {
-    const msg = String(final?.result || err || 'Claude stopped without a result').trim();
-    const nice = /log ?in/i.test(msg) ? 'Claude Code is not logged in. Run `claude` in a terminal and use /login, then try again.' : msg.slice(0, 500);
+    const msg = plain(String(final?.result || err || 'The director stopped without a result').trim());
+    const nice = /log ?in/i.test(msg) ? notSignedIn().message : msg.slice(0, 500);
     return emit(job, { status: 'failed', step: 'Failed', error: nice }, 'Error: ' + nice);
   }
   if (final.result) emit(job, {}, final.result.slice(0, 800));
   const out = fs.existsSync(path.join(job.dir, 'final.mp4')) ? 'final.mp4' : findNewestMp4(job.dir);
-  if (!out) return emit(job, { status: 'failed', step: 'Failed', error: 'Claude finished but no film was found in the project folder.' });
+  if (!out) return emit(job, { status: 'failed', step: 'Failed', error: 'The director finished, but no film was found in the project folder.' });
   emit(job, { status: 'done', step: 'Done', pct: 100, output: out }, `Finished: ${path.join(job.dir, out)}  (cost $${(final.total_cost_usd || 0).toFixed(2)})`);
   // the film's own title, from Claude's closing summary ("I've made **The Price of Sunlight**…")
   const title = filmTitle(job.dir, final.result || '');

@@ -30,7 +30,7 @@ function render() {
   root.replaceChildren(h('div', { class: 'proofs' },
     h('div', { class: 'g-top' },
       h('div', {}, h('div', { class: 'eyebrow' }, 'Proof library'), h('h1', { class: 'title-xl' }, 'Every claim, sourced.'),
-        h('p', { class: 'sub' }, 'Approved entries are the only numbers and claims Claude may use in decks, films and documents.')),
+        h('p', { class: 'sub' }, 'Approved entries are the only numbers and claims the studio may use in decks, films and documents.')),
       h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: importSheet }, icon('download', 14), 'Import CSV'), h('button', { class: 'btn primary big', onclick: () => editor() }, icon('plus', 16), 'New entry'))),
     h('div', { class: 'stats proof-stats' }, [['approved', 'approved'], ['draft', 'drafts'], ['expired', 'expired'], ['retired', 'retired']].map(([s, l]) => h('div', { class: 'stat' }, h('b', {}, n(s)), h('span', {}, l)))),
     h('div', { class: 'g-top', style: { alignItems: 'center' } },
@@ -59,7 +59,7 @@ function row(e) {
 }
 
 async function setStatus(e, status) {
-  try { await api('proof/' + e.id, { method: 'PUT', body: { status } }); await loadProof(); render(); toast(status === 'approved' ? 'Approved: Claude can now cite it.' : 'Updated.', 'ok'); }
+  try { await api('proof/' + e.id, { method: 'PUT', body: { status } }); await loadProof(); render(); toast(status === 'approved' ? 'Approved: it can now be cited.' : 'Updated.', 'ok'); }
   catch (err) { toast(err.message, 'error'); }
 }
 
@@ -112,13 +112,13 @@ function editor(e = null) {
       h('div', { class: 'eyebrow' }, e ? 'Edit proof' : 'New proof'),
       h('h2', { class: 'title-l' }, e ? 'Edit the claim' : 'Add a claim your team may make'),
       f('Kind', segmented([{ v: 'stat', label: 'Statistic' }, { v: 'fact', label: 'Fact' }, { v: 'quote', label: 'Customer quote' }], d.kind, v => { d.kind = v; }, { label: 'Kind' })),
-      f('Claim', claim, 'Write it the way it may be said. Approved wording is what Claude uses.'),
+      f('Claim', claim, 'Write it the way it may be said. Approved wording is used exactly as written.'),
       h('div', { class: 'row2' }, f('Value', inp(d, 'value', { placeholder: '92%' })), f('Metric', inp(d, 'metric', { placeholder: 'apnea events detected' }))),
       h('div', { class: 'field' }, h('span', {}, 'Source'), h('div', { class: 'row2' }, h('label', { class: 'pill-select', style: { width: '100%' } }, srcType, icon('chevronD', 12)), srcTitle), srcURL, citation),
       h('div', { class: 'field ev' }, h('span', {}, 'Find evidence'), h('div', { class: 'gen' }, pq, h('button', { class: 'btn', onclick: search }, icon('search', 14), 'PubMed')), results),
       f('Disclaimer', inp(d, 'disclaimer', { placeholder: 'e.g. Not a diagnostic device. Results from a single-site study.' }), 'Shown wherever the claim is used.'),
       h('div', { class: 'row2' }, f('Tags', tags), f('Owner', inp(d, 'owner', { placeholder: 'Who answers for it' }))),
-      f('Expires', expires, 'After this date the claim stops being offered to Claude.'),
+      f('Expires', expires, 'After this date the claim is no longer used.'),
       h('div', { class: 'actions' },
         h('button', { class: 'btn primary', onclick: () => save(true) }, icon('check', 14), 'Save and approve'),
         h('button', { class: 'btn', onclick: () => save(false) }, 'Save as draft'),

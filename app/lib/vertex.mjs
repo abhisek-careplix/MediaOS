@@ -65,9 +65,10 @@ export async function generateImage({ prompt, refs = [], aspect = '16:9' }) {
     const j = await r.json().catch(() => ({}));
     // busy or over the per-minute quota: back off (4, 8, 16, 30 s, with jitter) and try again
     if ((r.status === 429 || r.status >= 500) && attempt < 4) { await new Promise(res => setTimeout(res, Math.min(30000, 4000 * 2 ** attempt) + Math.random() * 1500)); continue; }
-    if (!r.ok) throw Object.assign(new Error(r.status === 429 ? 'Vertex AI is busy (over its per-minute quota). Try this frame again in a minute.' : j.error?.message?.slice(0, 300) || `Vertex AI answered ${r.status}`), { code: r.status });
+    // the reason people see names no provider
+    if (!r.ok) throw Object.assign(new Error(r.status === 429 ? 'The image service is busy. Try this frame again in a minute.' : `The image service couldn’t make this frame (${r.status}).`), { code: r.status, detail: j.error?.message });
     const c = j.candidates?.[0], img = c?.content?.parts?.find(x => x.inlineData);
-    if (!img) throw new Error(c?.finishReason ? `No image (${c.finishReason.toLowerCase().replace(/_/g, ' ')})` : 'No image came back');
+    if (!img) throw new Error(c?.finishReason ? `No image (${c.finishReason.toLowerCase().replace(/_/g, ' ')})` : 'No image came back.');
     return { png: Buffer.from(img.inlineData.data, 'base64'), mime: img.inlineData.mimeType, cost: (j.usageMetadata?.candidatesTokenCount || 1290) * PRICE };
   }
 }

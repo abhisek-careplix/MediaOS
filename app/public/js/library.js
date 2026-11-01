@@ -14,7 +14,7 @@ export async function showLibrary() {
     if (!list.length) grid.replaceChildren(h('div', { class: 'empty-state', style: { gridColumn: '1 / -1' } }, icon('film', 30), 'Nothing here yet.', h('button', { class: 'btn primary', onclick: () => go('create') }, 'Make a film')));
   };
   root.replaceChildren(h('div', { class: 'library' },
-    h('div', { class: 'g-top' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Library'), h('h1', { class: 'title-xl' }, 'Your films.'), h('p', { class: 'sub' }, `${films.filter(f => f.output).length} finished · ${films.length} in total, saved in ${app.cfg.films}`)),
+    h('div', { class: 'g-top' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Library'), h('h1', { class: 'title-xl' }, 'Your films.'), h('p', { class: 'sub' }, `${films.filter(f => f.output).length} finished · ${films.length} in total`)),
       segmented([{ v: 'all', label: 'All' }, ...(app.me?.auth ? [{ v: 'mine', label: 'Mine' }] : []), { v: 'quick', label: 'Instant' }, { v: 'director', label: 'Directed' }, { v: 'deck', label: 'Decks' }, { v: 'production', label: 'Productions' }], filter, v => { filter = v; paint(); }, { label: 'Filter' })),
     grid));
   paint();

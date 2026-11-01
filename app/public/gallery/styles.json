@@ -513,23 +513,6 @@
    "instant": null
   },
   {
-   "slug": "living-screencast",
-   "name": "Living Screencast",
-   "category": "Information & Keynote",
-   "film": "Clawd Moves In",
-   "line": "Clawd hops out of the terminal into the Claude app and acts out plan mode and self-checks in one take.",
-   "uses": [
-    "Product tutorials",
-    "Feature launches",
-    "Onboarding"
-   ],
-   "dur": 59.4,
-   "essence": "A product walkthrough that looks like a real screen recording, where a low-resolution mascot lives inside a high-resolution interface and acts out what the software is doing.",
-   "frame": "gallery/frames/living-screencast.jpg",
-   "video": "https://lemomo-ai.github.io/lemo-opuscar/films/living-screencast.mp4",
-   "instant": null
-  },
-  {
    "slug": "lowpoly-island",
    "name": "Low-poly Isometric Island",
    "category": "Materials & 3D",

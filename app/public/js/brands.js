@@ -80,7 +80,7 @@ function list() {
   const themes = h('section', { class: 'cat-block' },
     h('div', { class: 'section-head' },
       h('h2', { class: 'title-m' }, mine.length ? 'Start from a theme' : 'Start from a theme, or from scratch'),
-      h('span', { class: 'faint' }, 'Themes from Anthropic’s theme-factory skill, with open-licence fonts')),
+      h('span', { class: 'faint' }, 'Ready-made themes, with open-licence fonts')),
     h('div', { class: 'bgrid' }, data.presets.map(theme)));
   root.replaceChildren(h('div', { class: 'brands' }, head, yours, themes));
 }
@@ -239,7 +239,7 @@ async function editor(id, presetId) {
       toneIn.value = d.tone;
       paintRoles(); paintLogo(); paintSpec(); refresh();
       $$('select', typeBox).forEach((s, i) => { s.value = d.fonts[i ? 'body' : 'display']; });
-      toast(`Claude designed “${k.name}”${k.cost ? ` ($${k.cost.toFixed(3)})` : ''}.`, 'ok');
+      toast(`Designed “${k.name}”${k.cost ? ` ($${k.cost.toFixed(3)})` : ''}.`, 'ok');
     } catch (e) { toast(e.message, 'error'); }
     genBtn.disabled = false;
     genBox.classList.remove('active');

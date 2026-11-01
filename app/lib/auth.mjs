@@ -1,4 +1,4 @@
-// Google sign-in for a deployed VideoGen, limited to Google Workspace domains (default careplix.com).
+// Google sign-in for a deployed CarePlix Studio, limited to Google Workspace domains (default careplix.com).
 // Server-side OpenID Connect: authorization code + PKCE, ID token verified against Google's keys, then a
 // signed, HttpOnly session cookie. With no GOOGLE_CLIENT_ID the app runs in local mode (localhost only, no login).
 import crypto from 'crypto';

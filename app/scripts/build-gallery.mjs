@@ -4,7 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { LIB, APP } from '../lib/paths.mjs';
-import { TEMPLATES } from '../lib/templates.mjs';
+import { TEMPLATES, HIDDEN_STYLES } from '../lib/templates.mjs';
 
 const OUT = path.join(APP, 'public', 'gallery');
 const RAW = 'https://raw.githubusercontent.com/lemomo-ai/lemo-opuscar/main/docs/frames/';
@@ -12,7 +12,7 @@ const SITE = 'https://lemomo-ai.github.io/lemo-opuscar/';
 fs.mkdirSync(path.join(OUT, 'frames'), { recursive: true });
 
 const styles = [];
-for (const slug of fs.readdirSync(path.join(LIB, 'styles')).filter(s => !s.startsWith('_')).sort()) {
+for (const slug of fs.readdirSync(path.join(LIB, 'styles')).filter(s => !s.startsWith('_') && !HIDDEN_STYLES.has(s)).sort()) {
   let j;
   try { j = JSON.parse(fs.readFileSync(path.join(LIB, 'styles', slug, 'style.json'), 'utf8')); } catch { continue; }
   const md = fs.readFileSync(path.join(LIB, 'styles', slug, 'STYLE.md'), 'utf8');

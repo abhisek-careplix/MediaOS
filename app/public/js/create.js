@@ -30,7 +30,7 @@ const FIELDS = {
   end: [['kicker', 'Kicker'], ['text', 'Closing line', 2], ['sub', 'Sign-off', 2]],
 };
 const WRITING = ['Reading your brief', 'Finding the arc of the story', 'Choosing a palette and a tempo', 'Writing the narration', 'Timing every scene to the beat'];
-const MODELS = [['sonnet', 'Claude Sonnet'], ['haiku', 'Claude Haiku'], ['opus', 'Claude Opus']];
+const MODELS = [['sonnet', 'Balanced writer'], ['opus', 'Best writer'], ['haiku', 'Quick writer']];
 const LENGTHS = [['15', '15 seconds'], ['30', '30 seconds'], ['45', '45 seconds'], ['60', '60 seconds']];
 
 // media: product photos shown in the film; refs: reference images Claude reads but doesn't show ({ id, url } from /api/uploads)
@@ -112,10 +112,10 @@ function renderCompose() {
   const pics = app.gallery.styles.filter(s => s.frame && !s.instant).sort(() => 0.5 - Math.random()).slice(0, 4);
   looks.append(h('button', { class: 'look', onclick: () => go('gallery') },
     h('div', { class: 'mosaic' }, pics.map(s => h('img', { src: s.frame, alt: '' }))),
-    h('div', { class: 'meta' }, h('b', {}, `${app.gallery.styles.length} directed styles →`), h('span', {}, 'Watercolor, ukiyo-e, LiDAR, brick toys… Claude directs every frame.'))));
+    h('div', { class: 'meta' }, h('b', {}, `${app.gallery.styles.length} directed styles →`), h('span', {}, 'Watercolour, ukiyo-e, LiDAR, brick toys… directed frame by frame.'))));
 
   root.append(h('div', { class: 'compose' },
-    h('div', { class: 'hero' }, h('h1', { class: 'title-xl' }, 'Make a film.'), h('p', { class: 'sub' }, 'Describe it. Claude writes it, the studio draws it, and you watch it in seconds.')),
+    h('div', { class: 'hero' }, h('h1', { class: 'title-xl' }, 'Make a film.'), h('p', { class: 'sub' }, 'Describe it. The studio writes it, draws it, and you watch it in seconds.')),
     h('div', { style: { display: 'grid', gap: '16px' } }, box, ideas),
     h('div', {},
       h('div', { class: 'section-head' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Look'), h('h2', { class: 'title-m' }, 'Choose how it’s drawn')),
@@ -130,10 +130,9 @@ async function create(sample) {
   if (!sample && !opts.prompt.trim()) return toast('Describe your film first.', 'error');
   if (uploading(opts)) return toast('Still uploading your images…');
   const looking = !sample && opts.media.length + opts.refs.length > 0;
-  const model = MODELS.find(m => m[0] === opts.model)[1];
   const steps = looking ? ['Looking at your images', ...WRITING] : WRITING;
   const line = h('div', { class: 'line' }, sample ? 'Loading the sample script' : steps[0]);
-  const clock = h('div', { class: 'faint' }, sample ? '' : `${model} is writing your script`);
+  const clock = h('div', { class: 'faint' }, sample ? '' : 'Writing your script');
   root.innerHTML = '';
   root.append(h('div', { class: 'writing' },
     h('div', { class: 'glow active' }, h('div', { class: 'writing-stage' }, h('div', { class: 'orb' }), line, clock)),
@@ -143,7 +142,7 @@ async function create(sample) {
   let k = 0;
   const tick = setInterval(() => {
     const s = Math.round((performance.now() - t0) / 1000);
-    if (!sample) clock.textContent = `${model} is writing your script · ${s} s`;
+    if (!sample) clock.textContent = `Writing your script · ${s} s`;
     if (s && s % 3 === 0 && !sample) {
       line.classList.add('out');
       setTimeout(() => { line.textContent = steps[++k % steps.length]; line.classList.remove('out'); }, 380);
@@ -204,7 +203,7 @@ async function load(first = false) {
       const w = P.frame.contentWindow;
       if (w?.READY) return res(w);
       if (w?.BOOT_ERROR) return rej(new Error('Preview failed: ' + w.BOOT_ERROR));
-      if (Date.now() - t0 > 20000) return rej(new Error('The preview did not load.'));
+      if (Date.now() - t0 > 20000) return rej(new Error('The preview didn’t load.'));
       setTimeout(poll, 40);
     };
     P.frame.onload = poll;

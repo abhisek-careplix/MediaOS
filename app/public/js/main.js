@@ -17,7 +17,7 @@ async function boot() {
   if (app.me.auth) $('.sidebar').append(userChip(app.me));
   const c = app.cfg;
   $('#setup').replaceChildren(
-    row(c.claude.installed, c.claude.installed ? 'Claude Code ' + c.claude.version.split(' ')[0] : 'Claude Code missing'),
+    row(c.claude.installed, c.claude.installed ? 'AI writer ready' : 'AI writer missing'),
     row(c.libReady, c.libReady ? 'Style library ready' : 'Library missing'),
     row(c.voiceReady, c.voiceReady ? 'Offline voice ready' : 'No voice model'));
   mountCreate($('#view-create'));

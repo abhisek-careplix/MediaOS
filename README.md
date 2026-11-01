@@ -1,4 +1,6 @@
-# VideoGen
+# CarePlix Studio
+
+CarePlix's studio for films, decks and storyboards (the code and the deploy scripts still call it VideoGen).
 
 A local web app that turns a prompt into a short film made entirely in code, on top of the
 [Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar) library (installed at `~/lemo-opuscar`).

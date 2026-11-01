@@ -71,7 +71,7 @@ async function list() {
   root.replaceChildren(h('div', { class: 'library' },
     h('div', { class: 'g-top' },
       h('div', {}, h('div', { class: 'eyebrow' }, 'Deck Studio'), h('h1', { class: 'title-xl' }, 'Decks that only say what’s true.'),
-        h('p', { class: 'sub' }, 'Claude drafts the story and the slides, citing your Proof Library. Export editable PowerPoint, PDF, or turn a deck into a film.')),
+        h('p', { class: 'sub' }, 'The studio drafts the story and the slides, citing your Proof Library. Export editable PowerPoint or PDF, or turn a deck into a film.')),
       h('button', { class: 'btn primary big', onclick: () => go('decks/new') }, icon('plus', 16), 'New deck')),
     decks.length ? h('div', { class: 'lib-grid' }, decks.map(f => h('button', { class: 'lcard', onclick: () => go('decks/' + f.id) },
       h('div', { class: 'frame' }, f.poster ? h('img', { src: `/films/${f.id}/${f.poster}?v=${encodeURIComponent(f.exported || '')}`, alt: '' }) : h('div', { class: 'ph' }, icon('slides', 22), 'Not exported yet'),
@@ -96,17 +96,17 @@ async function composer() {
   const ta = h('textarea', { rows: 4, placeholder: 'e.g. A first-meeting deck for a hospital network: how continuous overnight monitoring with our smart ring finds sleep apnea patients who are never referred for a sleep study, and what a 90-day pilot looks like.', oninput: e => { C.brief = e.target.value; } }, C.brief);
   const go1 = h('button', { class: 'btn primary big', onclick: () => draftOutline() }, icon('sparkles', 16), 'Draft the outline');
   const box = h('div', { class: 'compose' },
-    h('div', { class: 'hero' }, h('h1', { class: 'title-xl' }, 'Make a deck.'), h('p', { class: 'sub' }, 'Describe the meeting. Claude plans the story, you shape it, then it writes every slide.')),
+    h('div', { class: 'hero' }, h('h1', { class: 'title-xl' }, 'Make a deck.'), h('p', { class: 'sub' }, 'Describe the meeting. The studio plans the story, you shape it, then it writes every slide.')),
     h('div', { style: { display: 'grid', gap: '14px' } },
       h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta,
         h('div', { class: 'prompt-bar' },
           segmented(AUDIENCE.map(([v, label]) => ({ v, label })), C.audience, v => { C.audience = v; }, { label: 'Audience' }),
           pillSelect([['6', '6 slides'], ['8', '8 slides'], ['10', '10 slides'], ['12', '12 slides']], C.count, v => { C.count = v; }, 'Slides'),
           pillSelect([['', 'No brand kit'], ...(app.brands || []).map(b => [b.id, b.name])], C.brandId, v => { C.brandId = v; localStorage.setItem('vg.brand', v); }, 'Brand kit'),
-          pillSelect([['sonnet', 'Claude Sonnet'], ['opus', 'Claude Opus'], ['haiku', 'Claude Haiku']], C.model, v => { C.model = v; }, 'Writer')))),
+          pillSelect([['sonnet', 'Balanced writer'], ['opus', 'Best writer'], ['haiku', 'Quick writer']], C.model, v => { C.model = v; }, 'Writer')))),
       h('div', { class: 'callout' }, icon('shield', 18), h('div', {}, approved
-        ? [h('b', {}, `${approved} approved proof entr${approved === 1 ? 'y' : 'ies'}. `), 'Claude may use only these for numbers, results, customers and quotes. ', h('a', { href: '#proof' }, 'Review the Proof Library')]
-        : [h('b', {}, 'Your Proof Library is empty. '), 'Claude will write without numbers or customer claims. ', h('a', { href: '#proof' }, 'Add approved facts first'), ' for a stronger deck.'])),
+        ? [h('b', {}, `${approved} approved proof entr${approved === 1 ? 'y' : 'ies'}. `), 'Only these can be used for numbers, results, customers and quotes. ', h('a', { href: '#proof' }, 'Review the Proof Library')]
+        : [h('b', {}, 'Your Proof Library is empty. '), 'Decks will be written without numbers or customer claims. ', h('a', { href: '#proof' }, 'Add approved facts first'), ' for a stronger deck.'])),
       h('div', { class: 'actions' }, go1, h('button', { class: 'btn ghost', onclick: () => openSample(C.brandId) }, 'or open the sample deck'))),
     h('div', { id: 'outline' }));
   root.replaceChildren(box);
@@ -117,7 +117,7 @@ async function composer() {
 async function draftOutline() {
   if (!C.brief.trim()) return toast('Write the brief first.', 'error');
   const out = $('#outline', root);
-  out.replaceChildren(h('div', { class: 'glow active', style: { borderRadius: '22px' } }, h('div', { class: 'writing-stage', style: { aspectRatio: 'auto', padding: '40px' } }, h('div', { class: 'orb' }), h('div', { class: 'line' }, 'Planning the storyline'), h('div', { class: 'faint' }, 'Claude is choosing what each slide must prove'))));
+  out.replaceChildren(h('div', { class: 'glow active', style: { borderRadius: '22px' } }, h('div', { class: 'writing-stage', style: { aspectRatio: 'auto', padding: '40px' } }, h('div', { class: 'orb' }), h('div', { class: 'line' }, 'Planning the storyline'), h('div', { class: 'faint' }, 'Choosing what each slide must prove'))));
   try {
     const r = await api('decks/outline', { method: 'POST', body: { brief: C.brief, audience: C.audience, count: +C.count, brandId: C.brandId || null, model: C.model } });
     C.outline = { title: r.title, slides: r.slides };
@@ -150,9 +150,9 @@ function paintOutline(cost) {
 
 async function writeAll() {
   const out = $('#outline', root), n = C.outline.slides.length, t0 = Date.now();
-  const line = h('div', { class: 'faint' }, `Claude is writing ${n} slides and their speaker notes`);
+  const line = h('div', { class: 'faint' }, `Writing ${n} slides and their speaker notes`);
   out.replaceChildren(h('div', { class: 'glow active', style: { borderRadius: '22px' } }, h('div', { class: 'writing-stage', style: { aspectRatio: 'auto', padding: '40px' } }, h('div', { class: 'orb' }), h('div', { class: 'line' }, 'Writing the deck'), line)));
-  const tick = setInterval(() => { line.textContent = `Claude is writing ${n} slides and their speaker notes · ${fmtLong((Date.now() - t0) / 1000)}`; }, 1000);
+  const tick = setInterval(() => { line.textContent = `Writing ${n} slides and their speaker notes · ${fmtLong((Date.now() - t0) / 1000)}`; }, 1000);
   try {
     const r = await api('decks', { method: 'POST', body: { brief: C.brief, audience: C.audience, brandId: C.brandId || null, model: C.model, outline: C.outline } });
     C.outline = null; C.brief = '';
@@ -235,7 +235,7 @@ function paintInspector() {
     btn.disabled = false; btn.replaceChildren(icon('sparkles', 14), 'Rewrite');
   } }, icon('sparkles', 14), 'Rewrite');
   ins.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
-  body.append(h('div', { class: 'field' }, h('span', {}, 'Rewrite with Claude'), h('div', { class: 'gen' }, ins, btn)));
+  body.append(h('div', { class: 'field' }, h('span', {}, 'Rewrite this slide'), h('div', { class: 'gen' }, ins, btn)));
   // this slide's checks
   const mine = D.issues.filter(x => x.slide === D.sel);
   body.append(h('div', { class: 'field', id: 'slide-checks' }, h('span', {}, 'Checks'), mine.length ? mine.map(x => h('div', { class: 'issue ' + x.level }, icon(x.level === 'error' ? 'info' : 'eye', 13), x.message)) : h('small', { class: 'faint' }, 'All checks pass on this slide.')));

@@ -20,7 +20,7 @@ function render() {
   const body = h('div', { style: { display: 'grid', gap: '36px' } });
   root.replaceChildren(h('div', { class: 'gallery' },
     h('div', { class: 'g-top' }, h('div', {}, h('div', { class: 'eyebrow' }, 'Styles'), h('h1', { class: 'title-xl' }, 'Every look, ready to direct.'),
-      h('p', { class: 'sub' }, `${G.templates.length} instant templates render in about a minute. ${G.styles.length} directed styles are made frame by frame by Claude.`)), search),
+      h('p', { class: 'sub' }, `${G.templates.length} instant templates render in about a minute. ${G.styles.length} directed styles are made frame by frame.`)), search),
     chips, body,
     h('p', { class: 'credit' }, 'Style frames and demo films: ', h('a', { href: G.source, target: '_blank', rel: 'noopener' }, 'Lemo-Opuscar by LemoLab'), ', CC BY 4.0. Demos stream from the official gallery.')));
   const paint = () => {

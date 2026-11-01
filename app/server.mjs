@@ -1,4 +1,4 @@
-// VideoGen: a local web app for prompt-to-film on top of the Lemo-Opuscar library.
+// CarePlix Studio (VideoGen): a web app for films, decks and storyboards on top of the Lemo-Opuscar library.
 //   node app/server.mjs   →  http://localhost:5178
 import http from 'http';
 import fs from 'fs';
@@ -49,7 +49,7 @@ const clientIP = req => (OPEN || process.env.TRUST_PROXY ? String(req.headers['c
 function limited(res, req, bucket, claude = false) {
   if (!OPEN) return false;
   const ip = clientIP(req);
-  if (claude && !allow('claude', 'site', LIMITS.claude)) return send(res, 429, { error: 'This site has reached its hourly limit for writing with Claude. Try again later, or start from the sample script.' }), true;
+  if (claude && !allow('claude', 'site', LIMITS.claude)) return send(res, 429, { error: 'This site has reached its hourly limit for AI writing. Try again later, or start from the sample script.' }), true;
   if (!allow(bucket, ip, LIMITS[bucket])) return send(res, 429, { error: `You've hit this site's limit of ${LIMITS[bucket]} ${{ render: 'export', script: 'script', upload: 'upload' }[bucket]}${LIMITS[bucket] === 1 ? '' : 's'} an hour. Try again a little later.` }), true;
   return false;
 }
@@ -227,7 +227,7 @@ async function api(req, res, url, user) {
       const text = (v, n = 600) => String(v ?? '').slice(0, n);
       if (b.title != null) p.title = text(b.title, 120);
       if (b.style && STYLES[b.style]) {
-        if (STYLES[b.style].vertex && !(await vertexStatus()).ok) return send(res, 400, { error: 'Generated frames need Vertex AI, which this server cannot reach.' });
+        if (STYLES[b.style].vertex && !(await vertexStatus()).ok) return send(res, 400, { error: 'Generated frames aren’t available on this server right now.' });
         p.style = b.style;
       }
       if (Array.isArray(b.cast)) {
@@ -542,7 +542,7 @@ async function api(req, res, url, user) {
 }
 
 // paths a signed-out visitor may load: the login page and what it shows
-const PUBLIC = p => p === '/login' || p.startsWith('/auth/') || p === '/css/studio.css' || p.startsWith('/gallery/frames/') || p === '/favicon.ico';
+const PUBLIC = p => p === '/login' || p.startsWith('/auth/') || p === '/css/studio.css' || p.startsWith('/gallery/frames/') || p.startsWith('/img/') || p === '/favicon.ico';
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -596,4 +596,4 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) send(res, [400, 403, 404, 429].includes(e.code) ? e.code : 500, { error: String(e.message || e) });
   }
 });
-server.listen(PORT, HOST, () => console.log(`VideoGen running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));
+server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));
