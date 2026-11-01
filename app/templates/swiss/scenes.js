@@ -1,6 +1,6 @@
 // Swiss Motion Graphics, quick-mode template: a modular grid, one typeface, one signal colour,
 // clip-reveal type that lands on the beat, knife cuts and page wipes. Grammar from styles/swiss-motion/STYLE.md.
-import { boot, bezier, fit, parseNumber, formatNumber, seg, sceneAt, fr, mix, rgba, luminance, drawLogo } from './runtime.js';
+import { boot, bezier, fit, parseNumber, formatNumber, seg, sceneAt, fr, mix, rgba, luminance, drawLogo, drawPhoto } from './runtime.js';
 
 let PAL = { page: '#EAE9E5', ink: '#111111', g1: '#DCDAD5', g2: '#C3C1BB', g3: '#76746F', body: '#4A4945' };
 const SIGNALS = ['#E30613', '#FF5A00', '#1F3FFF', '#00A651'];
@@ -10,7 +10,7 @@ let FD = 'Archivo', FB = 'Archivo', FIXED = false, LOGO = null, ON_SIG = '#11111
 const F = (w, s) => w >= 700 ? `${FIXED ? 400 : w} ${s}px ${FD}` : `${w} ${s}px ${FB}`;
 const MONO = s => `500 ${s}px "JetBrains Mono"`;
 
-let brandName = '', ctx, W, H, S, tl, cues, B, U, TR, OFF, SIG, cols, M, G, colW, bottom, portrait, total, title;
+let MEDIA = [], brandName = '', ctx, W, H, S, tl, cues, B, U, TR, OFF, SIG, cols, M, G, colW, bottom, portrait, total, title;
 const X = i => M + i * (colW + G);
 const SPAN = n => n * colW + (n - 1) * G;
 const snapIn = (lt, ta) => E(seg(lt, ta - U * 1.5, ta));
@@ -133,6 +133,29 @@ const LAYOUT = {
     L.aA = OFF + U * (2 + L.t.lines.length);
     L.bA = L.aA + U * 3;
     s.ev = [...L.tArr.map(t => ({ t, type: 'snap' })), { t: L.aA, type: 'snap' }, { t: L.bA, type: 'accent' }];
+    return L;
+  },
+  product(s) {
+    // the photo takes the grid's right half (the top in portrait); headline, line and callouts sit beside it
+    const L = {};
+    L.m = MEDIA[s.image | 0] || MEDIA[0];
+    L.box = portrait ? [X(0), M + 96 * S, SPAN(6), H * 0.46] : [X(6), M + 30 * S, SPAN(6), bottom - M - 30 * S];
+    L.x = X(0);
+    const w = portrait ? SPAN(6) : SPAN(5);
+    L.t = fit(ctx, s.text, z => F(800, z), w, 3, (portrait ? 84 : 92) * S, 32 * S, -0.02);
+    L.sub = s.sub ? fit(ctx, s.sub, z => F(500, z), w, 3, 32 * S, 20 * S) : null;
+    L.rows = (s.items || []).slice(0, 3).map(it => fit(ctx, it, z => F(700, z), w - 64 * S, 1, 34 * S, 18 * S, -0.01));
+    L.rowH = 62 * S;
+    const subH = L.sub ? 30 * S + L.sub.lines.length * L.sub.size * 1.3 : 0;
+    const blockH = L.t.lines.length * L.t.size + subH + (L.rows.length ? 44 * S + L.rows.length * L.rowH : 0);
+    const top = portrait ? L.box[1] + L.box[3] + 100 * S : M + 70 * S;
+    L.y = top + Math.max(0, (bottom - top - blockH) / 2) + L.t.size * 0.8;
+    L.boxA = OFF + U;
+    L.arr = L.t.lines.map((_, k) => OFF + U * (3 + k));
+    L.subA = OFF + U * (3 + L.t.lines.length);
+    L.rowA = L.rows.map((_, k) => L.subA + U * (2 + 2 * k));
+    s.ev = [{ t: L.boxA, type: 'block' }, ...L.arr.map(t => ({ t, type: 'snap' })), ...(L.sub ? [{ t: L.subA, type: 'snap', soft: 1 }] : []),
+      ...L.rowA.map((t, k) => ({ t, type: k === L.rows.length - 1 ? 'accent' : 'snap' }))];
     return L;
   },
   end(s) {
@@ -259,6 +282,36 @@ const DRAW = {
       }
     });
   },
+  product(s, L, lt) {
+    // the photo wipes in on the grid like the title block, then settles with a slow push-in
+    const [bx, by, bw, bh] = L.box, p = E(seg(lt, L.boxA, L.boxA + U * 2));
+    if (p > 0) {
+      ctx.save();
+      ctx.beginPath();
+      if (portrait) ctx.rect(bx, by, bw, bh * p); else ctx.rect(bx, by, bw * p, bh);
+      ctx.clip();
+      drawPhoto(ctx, L.m, bx, by, bw, bh, { zoom: 1.06 - 0.06 * E(seg(lt, L.boxA, s.dur)), plate: PAL.g1 });
+      ctx.restore();
+      const q = snapIn(lt, L.boxA + U * 2), z = 26 * S * q;
+      ctx.fillStyle = SIG;
+      if (q > 0) ctx.fillRect(bx, by + bh - z, z, z);
+    }
+    note(s.kicker, L.x, L.y - L.t.size * 1.15, snapIn(lt, OFF + U * 2));
+    L.t.lines.forEach((line, k) => rise(line, L.x, L.y + k * L.t.size, L.t.size, F(800, L.t.size), snapIn(lt, L.arr[k])));
+    let y = L.y + (L.t.lines.length - 1) * L.t.size;
+    if (L.sub) {
+      const y0 = y + 30 * S + L.sub.size;
+      L.sub.lines.forEach((line, k) => rise(line, L.x, y0 + k * L.sub.size * 1.3, L.sub.size, F(500, L.sub.size), snapIn(lt, L.subA), PAL.body, 0));
+      y = y0 + (L.sub.lines.length - 1) * L.sub.size * 1.3;
+    }
+    y += 44 * S;
+    L.rows.forEach((r, k) => {
+      const a = L.rowA[k], ry = y + k * L.rowH;
+      rule(L.x, ry, portrait ? SPAN(6) : SPAN(5), seg(lt, a - U * 2, a), k === 0 ? PAL.ink : PAL.g2);
+      rise(String(k + 1).padStart(2, '0'), L.x, ry + L.rowH * 0.5 + 7 * S, 19 * S, MONO(19 * S), snapIn(lt, a), PAL.g3, 0.06);
+      r.lines.forEach(line => rise(line, L.x + 64 * S, ry + L.rowH * 0.5 + r.size * 0.36, r.size, F(700, r.size), snapIn(lt, a), k === L.rows.length - 1 ? SIG : PAL.ink, -0.01));
+    });
+  },
   end(s, L, lt) {
     if (LOGO) {
       const p = snapIn(lt, OFF + U * 2), lh = (portrait ? 84 : 96) * S;
@@ -302,7 +355,7 @@ function chrome(s) {
   ctx.fillText(`${String(s.i + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`, W - M, H - M * 0.45);
   ctx.textAlign = 'left';
   // the brand's mark rides in the top corner, except on the end card where it is the hero
-  if (LOGO && s.type !== 'end') drawLogo(ctx, LOGO, W - M, M * 0.42, 34 * S, 220 * S, 'right');
+  if (LOGO && s.type !== 'end') drawLogo(ctx, LOGO, W - M, M * 0.42, 60 * S, 280 * S, 'right');
 }
 
 // captions sit on a column start in the layout; on a landscape title they move off the signal block
@@ -362,7 +415,7 @@ boot({
   // enough time for each scene's choreography to land and hold before it closes
   minDur(s, content) {
     const u = 30 / Math.min(132, Math.max(84, content.bpm || 112)), n = (s.items || []).length;
-    return { title: u * 8 + 1.4, number: u * 2 + 1.6 + u * 4 + 1.4, list: u * (4 + 2 * n) + 1.2, compare: u * 8 + 1.4, end: u * 9 + 1.2 }[s.type] || 0;
+    return { title: u * 8 + 1.4, number: u * 2 + 1.6 + u * 4 + 1.4, list: u * (4 + 2 * n) + 1.2, compare: u * 8 + 1.4, product: u * (8 + 2 * Math.min(3, n)) + 1.6, end: u * 9 + 1.2 }[s.type] || 0;
   },
   fonts: ['800 100px Archivo', '700 100px Archivo', '600 100px Archivo', '500 100px Archivo', '500 20px "JetBrains Mono"'],
   setup(o) {
@@ -392,10 +445,11 @@ boot({
       LOGO = b.logo;
       brandName = b.name || '';
     }
+    MEDIA = (o.media || []).filter(Boolean);
     total = tl.scenes.length;
     title = content.title || '';
     for (const s of tl.scenes) {
-      if (!LAYOUT[s.type]) s.type = 'statement';
+      if (!LAYOUT[s.type] || (s.type === 'product' && !MEDIA.length)) s.type = 'statement';
       s.L = LAYOUT[s.type](s);
     }
   },

@@ -44,6 +44,7 @@ ENV HOST=0.0.0.0 \
     VIDEOGEN_FILMS=/data/films \
     VIDEOGEN_BRANDS=/data/brands \
     VIDEOGEN_PROOF=/data/proof \
+    VIDEOGEN_UPLOADS=/data/uploads \
     RENDER_SLOTS=2
 VOLUME /data
 EXPOSE 5178

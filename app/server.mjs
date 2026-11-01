@@ -3,8 +3,9 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { execFileSync } from 'child_process';
-import { APP, FILMS, LIB } from './lib/paths.mjs';
+import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
 import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog } from './lib/jobs.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
@@ -31,7 +32,7 @@ if (exposed && !authOn() && !OPEN) { console.error('Refusing to listen on ' + HO
 
 // —— hourly limits for the open site: per visitor and site-wide ——
 const lim = (name, d) => /^\d+$/.test(process.env[name] || '') ? +process.env[name] : d;
-const LIMITS = { script: lim('LIMIT_SCRIPTS_PER_HOUR', 15), render: lim('LIMIT_RENDERS_PER_HOUR', 8), claude: lim('LIMIT_CLAUDE_PER_HOUR', 150) };
+const LIMITS = { script: lim('LIMIT_SCRIPTS_PER_HOUR', 15), render: lim('LIMIT_RENDERS_PER_HOUR', 8), upload: lim('LIMIT_UPLOADS_PER_HOUR', 60), claude: lim('LIMIT_CLAUDE_PER_HOUR', 150) };
 const hits = new Map();
 // true if allowed (and counted); key is per visitor, or 'site' for the global budget
 function allow(bucket, key, max) {
@@ -47,13 +48,22 @@ function limited(res, req, bucket, claude = false) {
   if (!OPEN) return false;
   const ip = clientIP(req);
   if (claude && !allow('claude', 'site', LIMITS.claude)) return send(res, 429, { error: 'This site has reached its hourly limit for writing with Claude. Try again later, or start from the sample script.' }), true;
-  if (!allow(bucket, ip, LIMITS[bucket])) return send(res, 429, { error: `You've hit this site's limit of ${LIMITS[bucket]} ${bucket === 'render' ? 'export' : 'script'}${LIMITS[bucket] === 1 ? '' : 's'} an hour. Try again a little later.` }), true;
+  if (!allow(bucket, ip, LIMITS[bucket])) return send(res, 429, { error: `You've hit this site's limit of ${LIMITS[bucket]} ${{ render: 'export', script: 'script', upload: 'upload' }[bucket]}${LIMITS[bucket] === 1 ? '' : 's'} an hour. Try again a little later.` }), true;
   return false;
 }
 if (configProblems().length) { console.error('Sign-in is misconfigured:\n  - ' + configProblems().join('\n  - ')); process.exit(1); }
 const SIZES = { '16:9': '1920x1080', '9:16': '1080x1920' };
+const KINDS = ['film', 'ad', 'reel'];
+// ids from POST /api/uploads → their files (at most 4)
+function uploaded(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 4).map(id => {
+    const file = path.join(UPLOADS, String(id));
+    if (!/^[0-9a-f]{20}\.(png|jpg|webp)$/.test(String(id)) || !fs.existsSync(file)) throw Object.assign(new Error('An attached image is missing. Attach it again.'), { code: 400 });
+    return file;
+  });
+}
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ttf': 'font/ttf', '.woff2': 'font/woff2',
+  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ttf': 'font/ttf', '.woff2': 'font/woff2',
   '.mp4': 'video/mp4', '.wav': 'audio/wav', '.srt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
 fs.mkdirSync(FILMS, { recursive: true });
@@ -98,17 +108,18 @@ const filmDir = id => {
 };
 
 // a quick-mode film folder: the template page + runtime + fonts, ready for content.json
-function createQuickFilm({ template, aspect, prompt, voice, narration, model, brandId, owner }) {
+function createQuickFilm({ template, aspect, prompt, voice, narration, model, brandId, owner, kind }) {
   const id = `q-${stamp()}-${Math.random().toString(36).slice(2, 6)}`;
   const dir = filmDir(id);
   fs.mkdirSync(dir, { recursive: true });
   fs.cpSync(path.join(APP, 'templates', 'shared'), dir, { recursive: true });
   fs.copyFileSync(path.join(APP, 'templates', template, 'scenes.js'), path.join(dir, 'scenes.js'));
-  const meta = { id, mode: 'quick', template, aspect, size: SIZES[aspect] || SIZES['16:9'], prompt, voice, narration, model, brandId: brandId || null, owner: owner?.email, ownerName: owner?.name, created: new Date().toISOString(), status: 'draft' };
+  const meta = { id, mode: 'quick', kind: KINDS.includes(kind) ? kind : 'film', template, aspect, size: SIZES[aspect] || SIZES['16:9'], prompt, voice, narration, model, brandId: brandId || null, owner: owner?.email, ownerName: owner?.name, created: new Date().toISOString(), status: 'draft' };
   writeMeta(dir, meta);
   return { id, dir, meta };
 }
-function saveContent(dir, script, template, brand) {
+// media: the film's product photos ([{ src }]); like the brand, kept from the saved film unless the server passes them
+function saveContent(dir, script, template, brand, media) {
   const tpl = TEMPLATES[template];
   let prev = null;
   try { prev = JSON.parse(fs.readFileSync(path.join(dir, 'content.json'), 'utf8')); } catch {}
@@ -116,6 +127,8 @@ function saveContent(dir, script, template, brand) {
   // the brand comes from the film's brand kit, never from the editor's copy
   const b = brand === undefined ? prev?.brand : brand;
   if (b) content.brand = b;
+  const m = media === undefined ? prev?.media : media;
+  if (m?.length) content.media = m;
   fs.writeFileSync(path.join(dir, 'content.json'), JSON.stringify(content, null, 1));
   const meta = readMeta(dir);
   writeMeta(dir, { ...meta, title: content.title });
@@ -156,11 +169,26 @@ async function api(req, res, url, user) {
   if (M === 'GET' && parts[0] === 'me') return send(res, 200, { ...user, auth: authOn(), open: OPEN, domains: AUTH.domains, canDirect: canDirect(user) });
   if (M === 'GET' && parts[0] === 'films' && !parts[1]) return send(res, 200, listFilms());
 
+  // a product photo or reference image for a brief: stored once by its content, then referred to by id
+  if (M === 'POST' && parts[0] === 'uploads' && !parts[1]) {
+    if (limited(res, req, 'upload')) return;
+    const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' }[String(req.headers['content-type'] || '').split(';')[0]];
+    if (!ext) return send(res, 400, { error: 'Images must be PNG, JPEG or WebP.' });
+    const buf = await rawBody(req, 12e6);
+    const magic = { '.png': buf.subarray(0, 4).toString('hex') === '89504e47', '.jpg': buf.subarray(0, 3).toString('hex') === 'ffd8ff', '.webp': buf.subarray(8, 12).toString() === 'WEBP' }[ext];
+    if (!magic) return send(res, 400, { error: 'That file is not a valid image.' });
+    const id = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 20) + ext;
+    fs.mkdirSync(UPLOADS, { recursive: true });
+    if (!fs.existsSync(path.join(UPLOADS, id))) fs.writeFileSync(path.join(UPLOADS, id), buf);
+    return send(res, 200, { id, url: '/uploads/' + id });
+  }
+
   // quick mode: write the script with Claude, or start from the built-in sample
   if (M === 'POST' && parts[0] === 'films' && !parts[1]) {
     const b = await body(req);
     if (!b.sample && limited(res, req, 'script', true)) return;
     if (!TEMPLATES[b.template]) return send(res, 400, { error: 'unknown template' });
+    const photos = b.sample ? [] : uploaded(b.media);
     let script, info = {};
     if (b.sample) {
       script = JSON.parse(fs.readFileSync(path.join(APP, 'templates', 'sample.json'), 'utf8'));
@@ -168,12 +196,23 @@ async function api(req, res, url, user) {
     } else {
       if (!String(b.prompt || '').trim()) return send(res, 400, { error: 'Write a prompt first.' });
       const brand = b.brandId ? readBrand(b.brandId) : null;
-      const r = await writeScript({ prompt: b.prompt, template: b.template, seconds: +b.seconds || 30, aspect: b.aspect, narration: b.narration !== false, model: b.model || 'sonnet', brand });
+      const r = await writeScript({ prompt: b.prompt, template: b.template, seconds: +b.seconds || 30, aspect: b.aspect, narration: b.narration !== false, model: b.model || 'sonnet', brand,
+        kind: b.kind, media: photos, refs: uploaded(b.refs), notes: String(b.notes || '').slice(0, 4000) });
       script = r.script;
       info = { cost: r.cost, ms: r.ms };
     }
     const { id, dir, meta } = createQuickFilm({ ...b, owner: user });
-    const content = saveContent(dir, script, b.template, b.brandId ? (await brandIntoFilm(b.brandId, dir)).page : null);
+    // the photos travel with the film, so it renders without the upload store
+    let media;
+    if (!b.sample && photos.length) {
+      fs.mkdirSync(path.join(dir, 'media'), { recursive: true });
+      media = photos.map((file, i) => {
+        const name = `product-${i + 1}${path.extname(file)}`;
+        fs.copyFileSync(file, path.join(dir, 'media', name));
+        return { src: 'media/' + name };
+      });
+    }
+    const content = saveContent(dir, script, b.template, b.brandId ? (await brandIntoFilm(b.brandId, dir)).page : null, media);
     return send(res, 200, { id, meta: { ...meta, title: content.title }, content, ...info });
   }
 
@@ -405,6 +444,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) return await api(req, res, url, user);
     if (p.startsWith('/films/')) return serveFile(req, res, FILMS, p.slice('/films/'.length));
     if (p.startsWith('/fonts/')) return serveFile(req, res, FONTS, p.slice('/fonts/'.length));
+    if (p.startsWith('/uploads/')) return serveFile(req, res, UPLOADS, p.slice('/uploads/'.length));
     if (p.startsWith('/brands/') && !p.endsWith('.json')) return serveFile(req, res, BRANDS, p.slice('/brands/'.length));
     if (p.startsWith('/tpl/')) {
       // a template page outside any film, for live brand previews: /tpl/<template>/<file>

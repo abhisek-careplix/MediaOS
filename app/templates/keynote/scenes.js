@@ -1,7 +1,7 @@
 // Dark Tech Keynote, quick-mode template: near-black stage, hairline grid, one accent, light-sweep reveals,
 // glyph-scramble numbers, cards that land on the beat, UI expand/collapse transitions.
 // Grammar from styles/dark-keynote/STYLE.md.
-import { boot, fit, parseNumber, formatNumber, seg, sceneAt, fr, mix, isDark, drawLogo } from './runtime.js';
+import { boot, fit, parseNumber, formatNumber, seg, sceneAt, fr, mix, isDark, drawLogo, drawPhoto } from './runtime.js';
 import { back, eo, hash, lerp, clamp } from '/core/lib.js';
 
 let C = { bg: '#07080B', s1: '#101217', s2: '#161920', s3: '#1D2129', t1: '#F2F4F8', t2: '#A2A8B5', t3: '#5F6674', red: '#FF4D5E' };
@@ -13,7 +13,7 @@ const ink = a => rgba(C.t1, a);
 const shade = a => DARK ? `rgba(0,0,0,${a})` : `rgba(20,24,40,${a * 0.3})`;
 const MONO = s => `500 ${s}px "JetBrains Mono"`;
 
-let ctx, W, H, S, tl, cues, B, TR, OFF, A, M, CY, portrait, stage, layer, layer2;
+let ctx, W, H, S, tl, cues, B, TR, OFF, A, M, CY, portrait, stage, layer, layer2, MEDIA = [];
 
 function rgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -215,6 +215,38 @@ const LAYOUT = {
     s.ev = [{ t: L.aA, type: 'snap' }, { t: L.bA, type: 'snap' }, { t: L.bA + B, type: 'lock' }];
     return L;
   },
+  product(s) {
+    // the photo lands as a lit card; the headline sweeps in beside it (below it in portrait) and callouts tick on
+    const L = {};
+    L.m = MEDIA[s.image | 0] || MEDIA[0];
+    const floor = cues.length ? H - 170 * S : H - M;
+    if (portrait) {
+      L.card = [M, H * 0.09, W - 2 * M, H * 0.46];
+      L.x = M; L.w = W - 2 * M;
+    } else {
+      const ch = Math.min(H * 0.66, floor - M - 40 * S), cw = Math.min(W * 0.44, ch * 1.25);
+      L.card = [M, CY - ch / 2, cw, ch];
+      L.x = M + cw + 80 * S; L.w = W - M - L.x;
+    }
+    L.t = fit(ctx, s.text, z => IN(600, z), L.w, 3, (portrait ? 76 : 80) * S, 32 * S, -0.02);
+    L.sub = s.sub ? fit(ctx, s.sub, z => IN(400, z), L.w, 3, 32 * S, 20 * S) : null;
+    L.rows = (s.items || []).slice(0, 3).map(it => fit(ctx, it, z => IN(500, z), L.w - 48 * S, 1, 32 * S, 18 * S, -0.01));
+    L.rowH = 58 * S;
+    const subH = L.sub ? 40 * S + L.sub.lines.length * L.sub.size * 1.32 : 0;
+    const blockH = L.t.lines.length * L.t.size * 1.1 + subH + (L.rows.length ? 40 * S + L.rows.length * L.rowH : 0);
+    const top = portrait ? L.card[1] + L.card[3] + 80 * S : M;
+    L.y = portrait ? top + Math.max(0, (floor - top - blockH) / 2) + L.t.size * 0.82 : CY - blockH / 2 + L.t.size * 0.82;
+    ctx.font = IN(600, L.t.size);
+    ctx.letterSpacing = -0.02 * L.t.size + 'px';
+    L.wMax = Math.max(...L.t.lines.map(l => ctx.measureText(l).width));
+    L.cardA = OFF + B * 0.5;
+    L.r0 = L.cardA + B;
+    L.r1 = L.r0 + Math.min(1.2, Math.max(0.8, B * 2));
+    L.rowA = L.rows.map((_, k) => L.r1 + B * (0.5 + k));
+    L.emph = emphSet(s);
+    s.ev = [{ t: L.cardA, type: 'snap' }, { t: L.r0, type: 'sweep' }, ...(L.sub ? [{ t: L.r1, type: 'soft' }] : []), ...L.rowA.map(t => ({ t, type: 'tick' }))];
+    return L;
+  },
   end(s) {
     const L = {};
     L.cols = portrait ? 4 : 9;
@@ -388,6 +420,43 @@ const DRAW = {
       ctx.globalAlpha = 1;
     });
   },
+  product(s, L, lt) {
+    const [x, y0, w, h] = L.card, q = seg(lt, L.cardA - 0.28, L.cardA);
+    if (q > 0) {
+      const y = y0 + (1 - back(q, 1.3)) * 90 * S;
+      ctx.globalAlpha = clamp(q * 2);
+      panel(x, y, w, h, 2, rgba(A, 0.35), rgba(A, 0.22));
+      drawPhoto(ctx, L.m, x + 1, y + 1, w - 2, h - 2, { radius: 17 * S, plate: C.s3, zoom: 1.05 - 0.05 * eo(seg(lt, L.cardA, s.dur)) });
+      ctx.globalAlpha = 1;
+    }
+    if (s.kicker) typed(s.kicker, L.x, L.y - L.t.size * 1.05, 22 * S, C.t3, OFF, lt);
+    lit(c => L.t.lines.forEach((line, k) => emphLine(c, line, L.x, L.y + k * L.t.size * 1.1, L.t.size, 600, C.t1, L.emph, 'left')), L.x, L.x + L.wMax, seg(lt, L.r0, L.r1));
+    let y = L.y + (L.t.lines.length - 1) * L.t.size * 1.1;
+    if (L.sub) {
+      const e = eo(seg(lt, L.r1 - 0.15, L.r1 + 0.2)), ys = y + 40 * S + L.sub.size;
+      ctx.globalAlpha = e;
+      L.sub.lines.forEach((line, k) => text(ctx, line, L.x, ys + (1 - e) * 14 * S + k * L.sub.size * 1.32, IN(400, L.sub.size), C.t2));
+      ctx.globalAlpha = 1;
+      y = ys + (L.sub.lines.length - 1) * L.sub.size * 1.32;
+    }
+    y += 40 * S;
+    L.rows.forEach((r, k) => {
+      const c = clamp(seg(lt, L.rowA[k] - 0.12, L.rowA[k] + 0.1));
+      if (c <= 0) return;
+      const ry = y + k * L.rowH + r.size * 0.36;
+      ctx.globalAlpha = clamp(c * 1.5);
+      ctx.save();
+      ctx.shadowColor = rgba(A, 0.7);
+      ctx.shadowBlur = 14 * S;
+      ctx.fillStyle = A;
+      ctx.beginPath();
+      ctx.arc(L.x + 10 * S, ry - r.size * 0.34, 8 * S * back(c, 2), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      r.lines.forEach(line => text(ctx, line, L.x + 40 * S + (1 - eo(c)) * 16 * S, ry, IN(500, r.size), C.t1, 'left', -0.01, r.size));
+      ctx.globalAlpha = 1;
+    });
+  },
   end(s, L, lt) {
     const cp = eo(seg(lt, L.col, L.col + B * 0.75));
     const cx = W / 2 - L.tile / 2, cy = L.gy + L.gh / 2 - L.tile / 2;
@@ -410,7 +479,7 @@ const DRAW = {
       const z = L.tile * 1.9 * lerp(1, 1.06, back(lk, 1.3) - lk), x = W / 2 - z * 0.9, y = L.gy + L.gh / 2 - z / 2;
       ctx.globalAlpha = lk;
       panel(x, y, z * 1.8, z, 2, rgba(A, 0.5), rgba(A, 0.25));
-      drawLogo(ctx, LOGO, W / 2, y + z * 0.22, z * 0.56, z * 1.5, 'center');
+      drawLogo(ctx, LOGO, W / 2, y + z * 0.22, z * 0.56, z * 1.5, 'center', 1, 'middle');
       ctx.globalAlpha = 1;
     } else if (lk > 0) {
       const z = L.tile * lerp(1, 1.15, back(lk, 1.3) - lk);
@@ -530,7 +599,7 @@ function draw(t) {
     ctx.stroke();
   }
   caption(t, s);
-  if (LOGO && s.type !== 'end') drawLogo(ctx, LOGO, 56 * S, 44 * S, 30 * S, 200 * S, 'left', 0.92);
+  if (LOGO && s.type !== 'end') drawLogo(ctx, LOGO, 56 * S, 40 * S, 56 * S, 260 * S, 'left');
   // the film ends like a screen switching off
   if (last) {
     const k = seg(lt, s.dur - 0.45, s.dur);
@@ -559,7 +628,7 @@ boot({
   // enough time for each scene's choreography to land and hold before it closes
   minDur(s, content) {
     const b = 60 / Math.min(132, Math.max(84, content.bpm || 104)), n = (s.items || []).length;
-    return { title: 0.4 + b * 2 + 1.2 + 1.4, number: 0.4 + b * 2 + 6 * b / 4 + 1.6, list: 0.4 + b * (2 + n) + 1.4, compare: 0.4 + b * 4 + 1.4, end: 0.4 + b * 4.5 + 1.0 + 1.6 }[s.type] || 0;
+    return { title: 0.4 + b * 2 + 1.2 + 1.4, number: 0.4 + b * 2 + 6 * b / 4 + 1.6, list: 0.4 + b * (2 + n) + 1.4, compare: 0.4 + b * 4 + 1.4, product: 0.4 + b * (3.5 + Math.min(3, n)) + 1.6, end: 0.4 + b * 4.5 + 1.0 + 1.6 }[s.type] || 0;
   },
   fonts: ['600 100px Inter', '700 100px Inter', '500 100px Inter', '400 100px Inter', '500 20px "JetBrains Mono"'],
   setup(o) {
@@ -584,6 +653,7 @@ boot({
       if (b.body) FB = `${b.body.family}, Inter`;
       LOGO = b.logo;
     }
+    MEDIA = (o.media || []).filter(Boolean);
     stage = makeStage();
     layer = document.createElement('canvas');
     layer.width = W;
@@ -592,7 +662,7 @@ boot({
     layer2.width = W;
     layer2.height = H;
     for (const s of tl.scenes) {
-      if (!LAYOUT[s.type]) s.type = 'statement';
+      if (!LAYOUT[s.type] || (s.type === 'product' && !MEDIA.length)) s.type = 'statement';
       s.L = LAYOUT[s.type](s);
     }
   },

@@ -154,6 +154,23 @@ input[type=range] { accent-color: var(--blue); }
 .prompt textarea::placeholder { color: var(--text3); }
 .prompt-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .prompt-bar .spacer { flex: 1; }
+.glow.over .prompt { box-shadow: inset 0 0 0 2px var(--blue); }
+/* attachments: product photos, references, notes */
+.attach { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 2px; }
+.att { position: relative; width: 64px; height: 64px; border-radius: 12px; overflow: hidden; background: var(--fill); box-shadow: inset 0 0 0 1px var(--sep2); flex: none; }
+.att img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .2s; }
+.att.busy img { opacity: .35; }
+.att.busy::after { content: ''; position: absolute; inset: 22px; border: 2px solid rgba(255, 255, 255, .25); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+.att .tag { position: absolute; left: 4px; bottom: 4px; font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 6px; background: rgba(0, 0, 0, .62); color: #fff; }
+.att .rm { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .62); color: #fff; opacity: 0; transition: opacity .15s; }
+.att:hover .rm, .att .rm:focus-visible { opacity: 1; }
+.attach .notes { flex: 1 0 100%; border: 1px solid var(--sep2); border-radius: 12px; background: var(--fill); padding: 10px 12px; font-size: 14px; line-height: 1.45; resize: vertical; outline: none; }
+.attach .notes:focus { border-color: var(--blue); }
+/* the inspector's photo picker for product scenes */
+.photo-pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-pick button { width: 64px; height: 64px; padding: 0; border-radius: 10px; overflow: hidden; border: 0; box-shadow: inset 0 0 0 1px var(--sep2); background: var(--fill); opacity: .6; transition: opacity .15s, box-shadow .15s; }
+.photo-pick button.on { opacity: 1; box-shadow: 0 0 0 2px var(--blue); }
+.photo-pick img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .go { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--text); color: #000; display: grid; place-items: center; transition: transform .2s var(--spring), opacity .2s; }
 .go:hover { transform: scale(1.06); }
 .go:disabled { opacity: .3; transform: none; }

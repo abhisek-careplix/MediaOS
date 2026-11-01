@@ -9,20 +9,28 @@ const IDEAS = [
   ['Advice', 'Three small habits that help teenagers sleep better, for parents. Calm and practical.'],
 ];
 const TYPES = ['title', 'statement', 'number', 'list', 'compare', 'end'];
-export const TYPE_COLOR = { title: '#0a84ff', statement: '#bf5af2', number: '#ff9f0a', list: '#30d158', compare: '#ff375f', end: '#64d2ff' };
+export const TYPE_COLOR = { title: '#0a84ff', statement: '#bf5af2', number: '#ff9f0a', list: '#30d158', compare: '#ff375f', product: '#ffd60a', end: '#64d2ff' };
+// what is being made: the format changes Claude's brief (a hook first, one message, a call to action) and the defaults
+const KINDS = [
+  { v: 'film', label: 'Film', placeholder: 'Describe your film: the story, who it’s for, the mood.' },
+  { v: 'ad', label: 'Ad', placeholder: 'Describe your ad: the product, who it’s for, the one message and the call to action. Attach product photos to show them.' },
+  { v: 'reel', label: 'Reel', placeholder: 'Describe your reel: the product or idea, who it’s for and the vibe. Attach product photos to show them.' },
+];
 const FIELDS = {
   title: [['kicker', 'Kicker'], ['text', 'Title', 2], ['sub', 'Subtitle', 2]],
   statement: [['kicker', 'Kicker'], ['text', 'Headline', 2], ['sub', 'Supporting line', 2], ['emphasis', 'Words to highlight']],
   number: [['kicker', 'Kicker'], ['number', 'Number'], ['unit', 'Unit'], ['text', 'What it measures', 2]],
   list: [['kicker', 'Kicker'], ['text', 'Heading', 2], ['items', 'Items (one per line)', 4]],
   compare: [['kicker', 'Kicker'], ['text', 'Heading', 2], ['left', 'Left'], ['right', 'Right (the hero)']],
+  product: [['kicker', 'Kicker'], ['text', 'Headline', 2], ['sub', 'Supporting line', 2], ['items', 'Callouts (one per line, up to 3)', 3]],
   end: [['kicker', 'Kicker'], ['text', 'Closing line', 2], ['sub', 'Sign-off', 2]],
 };
 const WRITING = ['Reading your brief', 'Finding the arc of the story', 'Choosing a palette and a tempo', 'Writing the narration', 'Timing every scene to the beat'];
 const MODELS = [['sonnet', 'Claude Sonnet'], ['haiku', 'Claude Haiku'], ['opus', 'Claude Opus']];
 const LENGTHS = [['15', '15 seconds'], ['30', '30 seconds'], ['45', '45 seconds'], ['60', '60 seconds']];
 
-const opts = { template: 'swiss', seconds: '30', aspect: '16:9', narration: true, voice: 'af_heart', model: 'sonnet', prompt: '', brandId: '' };
+// media: product photos shown in the film; refs: reference images Claude reads but doesn't show ({ id, url } from /api/uploads)
+const opts = { template: 'swiss', kind: 'film', seconds: '30', aspect: '16:9', narration: true, voice: 'af_heart', model: 'sonnet', prompt: '', brandId: '', media: [], refs: [], notes: '' };
 let root, film = null;
 const P = { win: null, canvas: null, t: 0, dur: 0, playing: false, last: 0, raf: 0 };
 let sel = 0, saveTimer = 0, exporting = null, thumbs = [];
@@ -50,7 +58,8 @@ function renderCompose() {
   stop();
   root.innerHTML = '';
   opts.brandId = (app.brands || []).some(b => b.id === localStorage.getItem('vg.brand')) ? localStorage.getItem('vg.brand') : '';
-  const ta = h('textarea', { rows: 3, placeholder: 'Describe your film: the story, who it’s for, the mood.', 'aria-label': 'Describe your film', oninput: e => { opts.prompt = e.target.value; goBtn.disabled = !e.target.value.trim(); } });
+  const kind = KINDS.find(k => k.v === opts.kind);
+  const ta = h('textarea', { rows: 3, placeholder: kind.placeholder, 'aria-label': `Describe your ${kind.label.toLowerCase()}`, oninput: e => { opts.prompt = e.target.value; goBtn.disabled = !e.target.value.trim(); } });
   ta.value = opts.prompt;
   const goBtn = h('button', { class: 'go', 'aria-label': 'Create film', title: 'Create (⌘↵)', disabled: !opts.prompt.trim(), onclick: () => create(false) }, icon('arrowUp', 18));
   const voice = pillSelect(app.cfg.voices, opts.voice, v => { opts.voice = v; }, 'Narrator voice');
@@ -65,13 +74,23 @@ function renderCompose() {
   const brandDot = h('i', { class: 'brand-dot', style: { background: (app.brands || []).find(b => b.id === opts.brandId)?.colors.accent || 'transparent' } });
   brandSel.prepend(brandDot);
   const bar = h('div', { class: 'prompt-bar' },
+    segmented(KINDS.map(k => ({ v: k.v, label: k.label })), opts.kind, v => {
+      opts.kind = v;
+      if (v === 'reel') Object.assign(opts, { aspect: '9:16', seconds: '30' });
+      if (v === 'ad') opts.seconds = '15';
+      renderCompose();
+    }, { label: 'Make a' }),
     brandSel,
     pillSelect(LENGTHS, opts.seconds, v => { opts.seconds = v; }, 'Length'),
     segmented([{ v: '16:9', icon: 'landscape', label: '16:9' }, { v: '9:16', icon: 'portrait', label: '9:16' }], opts.aspect, v => { opts.aspect = v; }, { label: 'Format' }),
     narr, voice,
     pillSelect(MODELS, opts.model, v => { opts.model = v; }, 'Writer'),
     h('span', { class: 'spacer' }), h('span', { class: 'kbd' }, '⌘↵'), goBtn);
-  const box = h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta, bar));
+  const box = h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta, attachments(), bar));
+  // images dropped anywhere on the prompt become product photos
+  box.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); box.classList.add('over'); } });
+  box.addEventListener('dragleave', e => { if (!box.contains(e.relatedTarget)) box.classList.remove('over'); });
+  box.addEventListener('drop', e => { e.preventDefault(); box.classList.remove('over'); attach([...e.dataTransfer.files], 'media'); });
 
   const ideas = h('div', { class: 'ideas' }, IDEAS.map(([label, text]) => h('button', { class: 'chip', onclick: () => { ta.value = opts.prompt = text; goBtn.disabled = false; ta.focus(); } }, icon('sparkles', 13), label)));
 
@@ -104,11 +123,62 @@ function renderCompose() {
   setTimeout(() => ta.focus(), 50);
 }
 
+// —— attachments: product photos, reference images and notes ——
+async function upload(file) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error(`${file.name}: use PNG, JPEG or WebP images.`);
+  if (file.size > 12e6) throw new Error(`${file.name} is over 12 MB.`);
+  const r = await fetch('/api/uploads', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+async function attach(files, list) {
+  const room = 4 - opts[list].length;
+  if (files.length > room) toast(`Up to 4 ${list === 'media' ? 'product photos' : 'reference images'}.`, 'error');
+  const adding = files.slice(0, Math.max(0, room)).map(file => ({ file, url: URL.createObjectURL(file), busy: true }));
+  opts[list].push(...adding);
+  paintAttachments();
+  await Promise.all(adding.map(async a => {
+    try { Object.assign(a, await upload(a.file), { busy: false }); } catch (e) { toast(e.message, 'error'); opts[list].splice(opts[list].indexOf(a), 1); }
+    paintAttachments();
+  }));
+}
+let attachBox = null;
+function attachments() {
+  attachBox = h('div', { class: 'attach' });
+  paintAttachments();
+  return attachBox;
+}
+function paintAttachments() {
+  if (!attachBox) return;
+  const pick = list => {
+    const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true, hidden: true, onchange: e => attach([...e.target.files], list) });
+    document.body.append(input);
+    input.click();
+    setTimeout(() => input.remove(), 60000);
+  };
+  const tile = (a, list, tag) => h('div', { class: 'att' + (a.busy ? ' busy' : ''), title: tag },
+    h('img', { src: a.url, alt: tag }), h('span', { class: 'tag' }, tag),
+    h('button', { class: 'rm', 'aria-label': 'Remove ' + tag.toLowerCase(), onclick: () => { opts[list].splice(opts[list].indexOf(a), 1); paintAttachments(); } }, icon('x', 11)));
+  const notes = h('textarea', { rows: 3, class: 'notes', placeholder: 'Reference notes: product facts, the offer, links, words to use or avoid…', 'aria-label': 'Reference notes', oninput: e => { opts.notes = e.target.value; } });
+  notes.value = opts.notes;
+  attachBox.replaceChildren(
+    ...opts.media.map((a, i) => tile(a, 'media', `Product ${i + 1}`)),
+    ...opts.refs.map((a, i) => tile(a, 'refs', `Ref ${i + 1}`)),
+    h('button', { class: 'chip', onclick: () => pick('media'), title: 'Product photos are shown in the video' }, icon('photo', 13), 'Product photo'),
+    h('button', { class: 'chip', onclick: () => pick('refs'), title: 'References guide Claude (an example ad, a landing page, a brand guide) but are not shown' }, icon('eye', 13), 'Reference'),
+    h('button', { class: 'chip' + (attachBox.notesOpen || opts.notes ? ' on' : ''), onclick: () => { attachBox.notesOpen = !(attachBox.notesOpen || opts.notes); if (!attachBox.notesOpen) opts.notes = ''; paintAttachments(); } }, icon('pencil', 13), 'Notes'),
+    ...(attachBox.notesOpen || opts.notes ? [notes] : []));
+}
+
 // —— writing ——
 async function create(sample) {
   if (!sample && !opts.prompt.trim()) return toast('Describe your film first.', 'error');
+  if ([...opts.media, ...opts.refs].some(a => a.busy)) return toast('Still uploading your images…');
+  const looking = !sample && opts.media.length + opts.refs.length > 0;
   const model = MODELS.find(m => m[0] === opts.model)[1];
-  const line = h('div', { class: 'line' }, sample ? 'Loading the sample script' : WRITING[0]);
+  const steps = looking ? ['Looking at your images', ...WRITING] : WRITING;
+  const line = h('div', { class: 'line' }, sample ? 'Loading the sample script' : steps[0]);
   const clock = h('div', { class: 'faint' }, sample ? '' : `${model} is writing your script`);
   root.innerHTML = '';
   root.append(h('div', { class: 'writing' },
@@ -122,11 +192,12 @@ async function create(sample) {
     if (!sample) clock.textContent = `${model} is writing your script · ${s} s`;
     if (s && s % 3 === 0 && !sample) {
       line.classList.add('out');
-      setTimeout(() => { line.textContent = WRITING[++k % WRITING.length]; line.classList.remove('out'); }, 380);
+      setTimeout(() => { line.textContent = steps[++k % steps.length]; line.classList.remove('out'); }, 380);
     }
   }, 1000);
   try {
-    const r = await api('films', { method: 'POST', body: { ...opts, seconds: +opts.seconds, sample } });
+    const r = await api('films', { method: 'POST', body: { ...opts, seconds: +opts.seconds, sample, media: opts.media.map(a => a.id), refs: opts.refs.map(a => a.id) } });
+    if (!sample) Object.assign(opts, { media: [], refs: [], notes: '' });
     film = { id: r.id, meta: r.meta, content: r.content, cost: r.cost, took: (performance.now() - t0) / 1000, fresh: true };
     go('create/' + r.id);
   } catch (e) {
@@ -295,8 +366,14 @@ function renderInspector(tab) {
     h('div', { style: { flex: 1 } }, h('b', {}, `Scene ${sel + 1} of ${c.scenes.length}`), h('div', { class: 'faint' }, tl ? `${tl.dur.toFixed(1)} s · starts at ${fmt(tl.t0)}` : '')),
     h('button', { class: 'btn ghost round', title: 'Duplicate scene', 'aria-label': 'Duplicate scene', onclick: () => { c.scenes.splice(sel + 1, 0, JSON.parse(JSON.stringify(s))); sel++; queueSave(true); } }, icon('plus', 15)),
     h('button', { class: 'btn ghost round danger', title: 'Delete scene', 'aria-label': 'Delete scene', disabled: c.scenes.length <= 2, onclick: () => { c.scenes.splice(sel, 1); sel = Math.max(0, sel - 1); queueSave(true); } }, icon('x', 15))));
+  const types = c.media?.length ? [...TYPES.slice(0, -1), 'product', 'end'] : TYPES;
   body.append(h('div', { class: 'field' }, h('span', {}, 'Scene type'),
-    segmented(TYPES.map(t => ({ v: t, label: t[0].toUpperCase() + t.slice(1) })), s.type, v => { s.type = v; queueSave(true); }, { label: 'Scene type', cls: 'typeseg' })));
+    segmented(types.map(t => ({ v: t, label: t[0].toUpperCase() + t.slice(1) })), s.type, v => { s.type = v; if (v === 'product') s.image ??= 0; queueSave(true); }, { label: 'Scene type', cls: 'typeseg' })));
+  if (s.type === 'product' && c.media?.length) {
+    body.append(h('div', { class: 'field' }, h('span', {}, 'Photo'), h('div', { class: 'photo-pick' }, c.media.map((m, i) =>
+      h('button', { class: (s.image | 0) === i ? 'on' : '', 'aria-label': `Photo ${i + 1}`, 'aria-pressed': (s.image | 0) === i, onclick: () => { s.image = i; queueSave(true); renderInspector('scene'); } },
+        h('img', { src: `/films/${film.id}/${m.src}`, alt: '' }))))));
+  }
   for (const [k, label, rows] of FIELDS[s.type] || FIELDS.statement) {
     if (k === 'left' || k === 'right') {
       const v = s[k] || (s[k] = { label: '', value: '' });

@@ -17,7 +17,10 @@ const childEnv = () => authOn() ? Object.fromEntries(KEEP.filter(k => process.en
 
 const CLAUDE = process.env.CLAUDE_BIN || 'claude';
 
-function scriptSchema(tpl) {
+// photos: how many product photos the brief carries (product scenes show them by index); every scene needs ~4 s to
+// land, so a 15-second cut gets at most 4 scenes and a fast tempo
+function scriptSchema(tpl, photos = 0, seconds = 30, kind = 'film') {
+  const short = seconds <= 15, quick = kind !== 'film' && seconds <= 20;
   const str = { type: 'string' };
   const side = { type: 'object', properties: { label: str, value: str }, required: ['label', 'value'], additionalProperties: false };
   return {
@@ -27,17 +30,18 @@ function scriptSchema(tpl) {
     properties: {
       title: str,
       accent: { type: 'string', enum: tpl.accents },
-      bpm: { type: 'integer', minimum: 84, maximum: 132 },
+      bpm: { type: 'integer', minimum: quick ? 120 : 84, maximum: 132 },
       scenes: {
         type: 'array',
         minItems: 3,
-        maxItems: 10,
+        maxItems: short ? 4 : 10,
         items: {
           type: 'object',
           additionalProperties: false,
           required: ['type', 'text', 'narration'],
           properties: {
-            type: { type: 'string', enum: ['title', 'statement', 'number', 'list', 'compare', 'end'] },
+            type: { type: 'string', enum: ['title', 'statement', 'number', 'list', 'compare', ...(photos ? ['product'] : []), 'end'] },
+            ...(photos ? { image: { type: 'integer', minimum: 0, maximum: photos - 1 } } : {}),
             kicker: str, text: str, sub: str, emphasis: str, number: str, unit: str,
             items: { type: 'array', items: str, minItems: 2, maxItems: 5 },
             left: side, right: side, narration: str,
@@ -48,16 +52,41 @@ function scriptSchema(tpl) {
   };
 }
 
-function scriptPrompt({ prompt, tpl, seconds, aspect, narration, brand }) {
-  const words = Math.round(seconds * 2.4);
-  return `You are the writer-director of a ${seconds}-second ${aspect === '9:16' ? 'vertical (9:16)' : 'widescreen (16:9)'} short film rendered in code in the "${tpl.name}" style.
+// what each format asks of the script, on top of the scene rules
+const KIND = {
+  film: { what: 'short film', rules: '' },
+  ad: { what: 'paid social video ad (Meta and TikTok)', rules: `
+- It is an ad: the first scene is the hook. Its text must stop the scroll in under two seconds (a sharp benefit, a surprising fact the user gave, or a tension), not the brand name or a generic welcome.
+- One message only. If there are product photos, show the product by the second scene.
+- The end scene is the call to action: text = the offer or next step, sub = the action (for example "Download the app" or the website) taken from the user's brief when they give one.
+- Ad platform rules: never assert or imply the viewer's personal traits or health conditions ("Do you have…", "Your diabetes…", "Struggling with your weight?"); speak about the product or about people in general. No guaranteed or exaggerated health outcomes, no before/after framing, no "cure", "treat" or "prevent" claims unless the user's own brief states them as cleared.` },
+  reel: { what: 'vertical short-form reel (Instagram Reels, TikTok, YouTube Shorts)', rules: `
+- It is a reel: the first scene is the hook and must land in under two seconds. Fast pace: more, shorter scenes; conversational, spoken-style narration, as if a person is talking to camera.
+- If there are product photos, show the product early and more than once if it helps.
+- End with a light call to action in the end scene (follow, learn more, or the brief's own next step).
+- Never assert or imply the viewer's personal traits or health conditions; no guaranteed health outcomes.` },
+};
+
+function scriptPrompt({ prompt, tpl, seconds, aspect, narration, brand, kind = 'film', photos = [], refs = [], notes = '' }) {
+  // each scene adds about a second of lead-in and pause around its line; short cuts can't afford to ignore that
+  const words = Math.round((seconds <= 20 ? seconds - 4.5 : seconds) * 2.4), K = KIND[kind] || KIND.film;
+  return `You are the writer-director of a ${seconds}-second ${aspect === '9:16' ? 'vertical (9:16)' : 'widescreen (16:9)'} ${K.what} rendered in code in the "${tpl.name}" style.
 Style: ${tpl.brief}
 ${brand ? `The film is for the brand "${brand.name}"; it is drawn in the brand's own colours, type and logo.${brand.tone ? ` Brand voice: ${brand.tone}.` : ''} Write in that voice; the closing card can carry the brand's name or line.\n` : ''}
 The user's request:
 """
 ${prompt}
 """
-
+${photos.length ? `
+The user attached ${photos.length} product photo${photos.length > 1 ? 's' : ''}: ${photos.map((p, i) => `${p} (image ${i})`).join(', ')}. Open each one with the Read tool and look at it before you write. Product scenes show them on screen. Describe only what you can see in a photo or what the user told you; never invent features, specifications or results.
+` : ''}${refs.length ? `
+The user also attached ${refs.length} reference image${refs.length > 1 ? 's' : ''}: ${refs.join(', ')}. Open them with the Read tool too. They are NOT shown in the film: use them to understand the product, the audience, the tone or the kind of ${K.what} the user wants (for example an example ad, a landing page or a brand guide). Never copy another brand's wording or claims from them.
+` : ''}${notes ? `
+Reference notes from the user (facts and details you may use):
+"""
+${notes}
+"""
+` : ''}
 Write the film as a scene script. Scene types and the fields each one uses:
 - title: the opening card. text = film title (2-6 words), kicker = a short label, sub = one line of context.
 - statement: one idea per screen. text = headline (max ~9 words), kicker = short label, sub = one supporting sentence (optional)${tpl.id === 'keynote' ? ', emphasis = one or two words from the headline to light in the accent colour' : ''}.
@@ -65,9 +94,10 @@ Write the film as a scene script. Scene types and the fields each one uses:
 - list: text = heading, items = 2-5 short items (max ~5 words each), kicker = short label.
 - compare: text = heading, left/right = { label, value } (values short, ideally numbers in the same unit so bars can be compared; right is the hero), kicker = short label.
 - end: the closing card. text = a short closing line (2-6 words), sub = optional call to action or sign-off, kicker = short label.
-
+${photos.length ? `- product: shows one product photo with a headline beside it. image = which photo (0-based, as numbered above), text = headline (max ~7 words), kicker = short label, sub = one supporting line (optional), items = 2-3 short callouts about what the photo shows (max ~5 words each, optional).
+` : ''}
 Rules:
-- Start with a title scene and finish with an end scene. ${seconds <= 20 ? '4-5' : seconds <= 35 ? '5-7' : '7-9'} scenes in total. Vary the types; a story arc, not a slide deck.
+${K.rules ? K.rules.trim() + '\n' : ''}- Start with a title scene and finish with an end scene. ${seconds <= 15 ? '3-4' : seconds <= 20 ? '4-5' : seconds <= 35 ? '5-7' : '7-9'} scenes in total${seconds <= 15 ? ' (every scene needs about 4 seconds to land, so keep it tight and give product scenes at most 2 callouts)' : ''}. Vary the types; a story arc, not a slide deck.
 - ${narration ? `narration: the spoken line for each scene, ${words} words in total across the film (about 2.4 words per second), natural spoken English, one or two short sentences per scene; write numbers as they should be read aloud only when digits would be ambiguous.` : 'narration: one short line per scene (used as on-screen captions).'}
 - On-screen text is short and punchy; narration carries the detail and must not just repeat the on-screen text word for word.
 - Facts: only use figures the user gave or that are well established and widely reported. If unsure of a figure, use a statement scene instead of a number or compare scene. Never invent precise statistics.
@@ -106,15 +136,19 @@ export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 2400
   } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
 }
 
-export async function writeScript({ prompt, template, seconds = 30, aspect = '16:9', narration = true, model = 'sonnet', brand = null }) {
+// media / refs: image files (product photos to show, reference images to read); Claude gets only the Read tool, and
+// only these copies in a fresh folder to read
+export async function writeScript({ prompt, template, seconds = 30, aspect = '16:9', narration = true, model = 'sonnet', brand = null, kind = 'film', media = [], refs = [], notes = '' }) {
   const tpl = TEMPLATES[template];
   if (!tpl) throw new Error('unknown template ' + template);
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'videogen-'));
   try {
-    const args = ['-p', scriptPrompt({ prompt, tpl, seconds, aspect, narration, brand }),
-      '--output-format', 'json', '--json-schema', JSON.stringify(scriptSchema(tpl)), '--model', model,
-      '--tools', '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
-    const { out, err } = await runClaude(args, { cwd });
+    const copy = (files, stem) => files.map((f, i) => { const name = `./${stem}-${i + 1}${path.extname(f)}`; fs.copyFileSync(f, path.join(cwd, name)); return name; });
+    const photos = copy(media, 'product'), looks = copy(refs, 'reference');
+    const args = ['-p', scriptPrompt({ prompt, tpl, seconds, aspect, narration, brand, kind, photos, refs: looks, notes }),
+      '--output-format', 'json', '--json-schema', JSON.stringify(scriptSchema(tpl, photos.length, seconds, kind)), '--model', model,
+      '--tools', photos.length || looks.length ? 'Read' : '', '--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence'];
+    const { out, err } = await runClaude(args, { cwd, timeout: photos.length || looks.length ? 420000 : 300000 });
     let res;
     try { res = JSON.parse(out); } catch { throw new Error((err || out || 'Claude returned nothing').trim().slice(0, 400)); }
     if (res.is_error) {
@@ -127,6 +161,7 @@ export async function writeScript({ prompt, template, seconds = 30, aspect = '16
       if (m) script = JSON.parse(m[0]);
     }
     if (!script?.scenes?.length) throw new Error('Claude did not return a scene script');
+    for (const s of script.scenes) if (s.type === 'product' && !(s.image >= 0 && s.image < photos.length)) s.image = 0;
     return { script, cost: res.total_cost_usd, ms: res.duration_ms };
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
