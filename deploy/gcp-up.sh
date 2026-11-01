@@ -63,6 +63,15 @@ if [ -z "$DRY" ] && ! gcloud --project "$PROJECT" compute instances describe "$N
   gc compute instances set-service-account "$NAME" --zone "$ZONE" --service-account "$SA" --scopes cloud-platform
   gc compute instances start "$NAME" --zone "$ZONE"
 fi
+# …and the Vertex AI User role (frames, video shots, take checks). The default compute account often has Editor, which
+# covers it, but organisations that turn off that default grant leave it without; granting the role again is harmless.
+if [ -z "$DRY" ]; then
+  SA=$(gcloud --project "$PROJECT" compute instances describe "$NAME" --zone "$ZONE" --format='value(serviceAccounts[0].email)')
+  gc projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" --role roles/aiplatform.user \
+    --condition None >/dev/null || echo "  ! Couldn't grant Vertex AI User to $SA (needs a project IAM admin); storyboard frames and video shots may fail."
+else
+  echo "+ gcloud projects add-iam-policy-binding $PROJECT --member serviceAccount:<the VM's account> --role roles/aiplatform.user"
+fi
 
 # films, brand kits, proof and the audit trail are backed up to a private, versioned bucket (deploy/gcp-storage.sh)
 BUCKET=${BUCKET:-$PROJECT-studio-media}
