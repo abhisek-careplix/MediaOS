@@ -36,6 +36,9 @@ async function projectId() {
   return project;
 }
 
+// for other Vertex AI callers (video shots)
+export { token as vertexToken, projectId as vertexProject };
+
 // whether images can be generated here, checked once every ten minutes: { ok, model, reason }
 let status = null;
 export async function vertexStatus() {

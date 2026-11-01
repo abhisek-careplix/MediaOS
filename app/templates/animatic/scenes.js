@@ -2,9 +2,11 @@
 // storyboard frame (an SVG sketch, with the real product photo placed into its box), held for the shot's length while
 // the camera move written on the board is suggested, its on-screen text in a lower third and its label in the corner.
 // Cuts are hard, as in an edit; narration and music come from the usual quick pipeline.
+// A rough cut is the same film with real video: a scene with a clip (a chosen take, WebM) plays it, seeked to each frame,
+// and the slate goes, since it's no longer a storyboard.
 import { boot, fit, seg, sceneAt, drawPhoto, drawLogo } from './runtime.js';
 
-let ctx, W, H, S, tl, cues, portrait, BOARDS = [], MEDIA = [], LOGO = null;
+let ctx, W, H, S, tl, cues, portrait, BOARDS = [], MEDIA = [], LOGO = null, CUT = false;
 let FD = 'Inter', FB = 'Inter', ACCENT = '#0a84ff';
 const F = (w, s, face = FB) => `${w} ${s}px ${face}`;
 const MONO = s => `500 ${s}px "JetBrains Mono"`;
@@ -44,18 +46,31 @@ function pill(text, x, y, size, align = 'left') {
   ctx.letterSpacing = '0px';
 }
 
-function draw(t) {
+// move a clip to time t and wait until that frame can be drawn
+const seek = (v, t) => new Promise(res => {
+  if (Math.abs(v.currentTime - t) < 1e-3 && v.readyState >= 2) return res();
+  v.addEventListener('seeked', res, { once: true });
+  v.currentTime = t;
+});
+
+async function draw(t) {
   const s = sceneAt(tl, t), lt = t - s.t0, q = s.dur ? Math.min(1, lt / s.dur) : 0;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#fbfaf7';
-  ctx.fillRect(0, 0, W, H);
   const b = BOARDS[s.i];
-  const [z, ox, oy] = camera(s.move, q, t);
+  // a held last frame when the scene runs longer than its clip
+  if (b?.video) await seek(b.video, Math.min(lt, b.dur - 1 / 48));
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = b?.video ? '#000' : '#fbfaf7';
+  ctx.fillRect(0, 0, W, H);
+  const [z, ox, oy] = b?.video ? [1, 0, 0] : camera(s.move, q, t);
   ctx.save();
   ctx.translate(W / 2 + ox * W, H / 2 + oy * H);
   ctx.scale(z, z);
   ctx.translate(-W / 2, -H / 2);
-  if (b) {
+  if (b?.video) {
+    // the clip covers the frame (it is made at the film's aspect; any difference is cropped, not squeezed)
+    const k = Math.max(W / b.vw, H / b.vh);
+    ctx.drawImage(b.video, (W - b.vw * k) / 2, (H - b.vh * k) / 2, b.vw * k, b.vh * k);
+  } else if (b) {
     ctx.drawImage(b.src, 0, 0, W, H);
     const m = MEDIA[s.image];
     if (m && s.box) { const k = W / b.w; drawPhoto(ctx, m, s.box.x * k, s.box.y * k, s.box.w * k, s.box.h * k, { fit: 'cover', radius: 6 * S }); }
@@ -69,8 +84,8 @@ function draw(t) {
   ctx.restore();
   // the slate: shot number, size and move, and where we are in the cut
   const m = 28 * S;
-  pill(`SHOT ${String(s.n || s.i + 1).padStart(2, '0')}  ${String(s.size || '').toUpperCase()} · ${String(s.move || '').toUpperCase()}`, m, m, 17 * S);
-  pill(`${lt.toFixed(1)} / ${s.dur.toFixed(1)} s`, W - m, m, 17 * S, 'right');
+  if (!CUT) pill(`SHOT ${String(s.n || s.i + 1).padStart(2, '0')}  ${String(s.size || '').toUpperCase()} · ${String(s.move || '').toUpperCase()}`, m, m, 17 * S);
+  if (!CUT) pill(`${lt.toFixed(1)} / ${s.dur.toFixed(1)} s`, W - m, m, 17 * S, 'right');
   // on-screen text, as it would be supered: a lower third sized to its words, moved to the top when the shot shows the product
   if (s.text) {
     const a = Math.min(1, seg(lt, 0.1, 0.35)), mx = (portrait ? 64 : 96) * S, maxW = W - 2 * mx;
@@ -134,6 +149,17 @@ boot({
     };
     const out = [];
     for (const s of content.scenes) {
+      if (s.clip) {
+        // the clip in memory (a blob), so seeking never waits on the network
+        const blob = await (await fetch(s.clip)).blob(), v = document.createElement('video');
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = 'auto';
+        v.src = URL.createObjectURL(blob);
+        await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error('could not load ' + s.clip)); });
+        out.push({ video: v, vw: v.videoWidth, vh: v.videoHeight, dur: v.duration || s.clipDur || s.dur });
+        continue;
+      }
       if (!s.board) { out.push(null); continue; }
       const img = await decode(s.board);
       if (!/\.svg$/i.test(s.board)) { out.push({ src: img, w: img.naturalWidth }); continue; }
@@ -150,6 +176,7 @@ boot({
     S = Math.min(W, H) / 1080;
     portrait = H > W * 1.1;
     BOARDS = o.assets || [];
+    CUT = BOARDS.some(b => b?.video);
     MEDIA = (o.media || []).filter(Boolean);
     const b = o.brand;
     if (b) {

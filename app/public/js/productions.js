@@ -17,6 +17,11 @@ const MODELS = [['sonnet', 'Balanced writer'], ['opus', 'Best writer'], ['haiku'
 
 const brief = { brief: '', format: 'brand', kind: 'ad', seconds: '30', aspect: '16:9', brandId: '', model: 'sonnet', style: '', media: [], refs: [], notes: '' };
 let root, P = null, events = null, saveTimer = 0, META = null;
+// shooting: the video engine and takes per shot (engines are listed by the server, by plain name)
+const SHOOT = { engine: null, takes: 1 };
+const shootable = s => s.engine !== 'code' && /\.png$/.test(s.board || '');
+const lengthFor = (e, d) => e.durations.find(x => x >= d) || e.durations.at(-1);
+const estimate = (shots, e, takes) => shots.reduce((t, s) => t + lengthFor(e, +s.dur || 3) * e.rate * takes, 0);
 // frame styles this server can make: Sketch always; Illustrated and Cinematic when Vertex AI is reachable
 const meta = async () => META || (META = await api('productions/meta').catch(() => ({ styles: [{ id: 'sketch', name: 'Sketch' }], vertex: { ok: false } })));
 const styles = () => META.styles.filter(s => !s.vertex || META.vertex.ok);
@@ -117,7 +122,7 @@ async function refresh() {
 
 function render() {
   const p = P.production, view = p.concept == null ? 'concepts' : 'board';
-  const steps = [['Brief', true], ['Concept', p.concept != null], ['Storyboard', p.shots.some(s => s.board)], ['Animatic', !!P.meta.animatic]];
+  const steps = [['Brief', true], ['Concept', p.concept != null], ['Storyboard', p.shots.some(s => s.board)], ['Shoot', p.shots.some(s => s.takes?.length)], ['Cut', !!P.meta.cut]];
   const bar = h('header', { class: 'ed-bar prod-bar' },
     h('button', { class: 'btn ghost', onclick: () => go('productions') }, icon('chevronL', 15), 'Productions'),
     h('div', { class: 'ed-title' }, h('input', { value: p.title || P.meta.title || '', 'aria-label': 'Title', oninput: e => { p.title = e.target.value; queueSave(); } }),
@@ -174,14 +179,53 @@ function board() {
       styles().length > 1 ? segmented(styles().map(s => ({ v: s.id, label: s.name, title: s.vertex ? 'Generated images, about $0.04 a frame' : 'Quick pencil-style sketches, free' })), p.style || 'sketch', restyle, { label: 'Frame style' }) : null,
       h('button', { class: 'btn ghost', onclick: () => { P.was = p.concept; p.concept = null; render(); } }, 'Change concept'),
       h('button', { class: 'btn', disabled: running, onclick: redrawAll }, icon('brush', 14), running ? (P.job.step || 'Drawing…') : 'Redraw all'),
-      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.board), onclick: animatic }, icon('film', 15), P.meta.animatic ? 'New animatic' : 'Make the animatic')));
+      h('button', { class: 'btn', disabled: running || !p.shots.some(s => s.board), onclick: animatic }, icon('film', 15), P.meta.animatic ? 'New animatic' : 'Make the animatic'),
+      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.take), onclick: cut, title: 'The chosen takes, cut together with the voice-over and music' }, icon('clapper', 15), P.meta.cut ? 'New rough cut' : 'Make the rough cut')));
   const grid = h('div', { class: 'board-grid' + (p.aspect === '9:16' ? ' tall' : '') }, p.shots.map((s, i) => shotCard(s, i, running, warn[s.id] || [])));
-  return h('div', { class: 'prod-body' }, head, castPanel(), grid,
-    P.meta.animatic ? h('p', { class: 'faint' }, 'Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create')) : null);
+  return h('div', { class: 'prod-body' }, head, shootBar(running), castPanel(), grid,
+    P.meta.cut || P.meta.animatic ? h('p', { class: 'faint' }, ...(P.meta.cut ? ['Latest rough cut: ', h('a', { href: '#create/' + P.meta.cut }, 'open it in Create'), '. '] : []), ...(P.meta.animatic ? ['Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create'), '.'] : [])) : null);
 }
+// Step 4: film the frames. Graphics shots stay brand cards; sketches need a generated frame first.
+function shootBar(running) {
+  const p = P.production, list = META.engines || [];
+  if (!list.length) return h('p', { class: 'faint' }, 'Video shots aren’t available on this server yet.');
+  if (!list.some(e => e.id === SHOOT.engine)) SHOOT.engine = list[0].id;
+  const e = list.find(x => x.id === SHOOT.engine), ready = p.shots.filter(shootable);
+  const cost = h('span', { class: 'faint' });
+  const paint = () => { const en = list.find(x => x.id === SHOOT.engine); cost.textContent = ready.length ? `${ready.length} shot${ready.length > 1 ? 's' : ''} · about $${estimate(ready, en, SHOOT.takes).toFixed(2)}` : 'No shots ready: switch the frames to Illustrated or Cinematic first.'; };
+  paint();
+  return h('div', { class: 'shoot-bar' },
+    h('div', {}, h('div', { class: 'eyebrow' }, 'Step 4 · Shoot'), h('b', {}, 'Turn the frames into video')),
+    segmented(list.map(x => ({ v: x.id, label: x.name, title: `${x.hint}. About $${x.rate.toFixed(2)} a second.` })), SHOOT.engine, v => { SHOOT.engine = v; paint(); }, { label: 'Video engine' }),
+    pillSelect([[1, '1 take'], [2, '2 takes'], [3, '3 takes']], SHOOT.takes, v => { SHOOT.takes = +v; paint(); }, 'Takes per shot'),
+    cost,
+    h('span', { class: 'spacer' }),
+    h('button', { class: 'btn primary', disabled: running || !ready.length, onclick: () => shoot(ready.map(s => s.id)) }, icon('film', 15), running ? (P.job.step || 'Working…') : 'Shoot all'));
+}
+async function shoot(ids) {
+  const p = P.production, e = META.engines.find(x => x.id === SHOOT.engine), shots = p.shots.filter(s => ids.includes(s.id));
+  if (!confirm(`Shoot ${shots.length} shot${shots.length > 1 ? 's' : ''}, ${SHOOT.takes} take${SHOOT.takes > 1 ? 's' : ''} each, with ${e.name}? About $${estimate(shots, e, SHOOT.takes).toFixed(2)}, and a minute or two per take.`)) return;
+  await save(true);
+  try { const r = await api(`productions/${P.id}/shoot`, { method: 'POST', body: { ids, engine: SHOOT.engine, takes: SHOOT.takes } }); Object.assign(P, r); render(); follow(); }
+  catch (err) { toast(err.message, 'error'); }
+}
+async function cut() {
+  await save(true);
+  const done = working(['Converting the chosen takes', 'Placing them on the timeline', 'Adding the end card'], 'Building the rough cut');
+  try { const r = await api(`productions/${P.id}/cut`, { method: 'POST', body: {} }); toast('Rough cut ready. Play it, adjust the voice or timing, then export.', 'ok'); go('create/' + r.id); }
+  catch (e) { toast(e.message, 'error'); render(); }
+  finally { done(); }
+}
+
 function frame(s, cls = '') {
   const p = P.production, [w, hh] = p.aspect === '9:16' ? [900, 1600] : [1600, 900];
   const m = s.product >= 0 && p.media?.[s.product];
+  const take = s.take && s.takes?.find(t => t.id === s.take);
+  if (take) {
+    const v = h('video', { src: `/films/${P.id}/${take.file}`, poster: `/films/${P.id}/${take.poster}`, muted: true, loop: true, playsinline: true, preload: 'none', 'aria-label': s.action });
+    v.muted = true;
+    return h('div', { class: 'sb-frame has-take ' + cls + (p.aspect === '9:16' ? ' tall' : ''), onmouseenter: () => v.play().catch(() => {}), onmouseleave: () => v.pause() }, v, h('span', { class: 'take-badge' }, icon('film', 11), 'Video'));
+  }
   return h('div', { class: 'sb-frame ' + cls + (p.aspect === '9:16' ? ' tall' : '') },
     s.board ? h('img', { src: `/films/${P.id}/${s.board}`, alt: s.action }) : h('div', { class: 'drawing' }, P.job?.status === 'running' ? 'Drawing…' : 'Not drawn'),
     s.board && s.box && m ? h('img', { class: 'prod-photo', src: `/films/${P.id}/${m.src}`, alt: 'Product', style: { left: s.box.x / w * 100 + '%', top: s.box.y / hh * 100 + '%', width: s.box.w / w * 100 + '%', height: s.box.h / hh * 100 + '%' } }) : null);
@@ -195,7 +239,17 @@ function shotCard(s, i, running, unsupported) {
     s.vo ? h('p', { class: 'vo' }, icon('wave', 12), s.vo) : null,
     s.super ? h('p', { class: 'super' }, '“', s.super, '”') : null,
     unsupported.length ? h('p', { class: 'warn' }, icon('shield', 12), `Not backed by the Proof Library: ${unsupported.join(', ')}`) : null,
-    s.fallback ? h('p', { class: 'faint' }, `Drawn as a sketch: ${s.fallback}`) : null);
+    s.fallback ? h('p', { class: 'faint' }, `Drawn as a sketch: ${s.fallback}`) : null,
+    takeStrip(s, running));
+}
+// the takes of a shot: pick one for the cut, or shoot another
+function takeStrip(s, running) {
+  if (!shootable(s) || !(META.engines || []).length) return null;
+  const pick = async t => { s.take = t.id; await save(true); render(); };
+  return h('div', { class: 'takes' },
+    ...(s.takes || []).map((t, k) => h('button', { class: 'take' + (t.id === s.take ? ' on' : ''), title: `Take ${k + 1}${t.id === s.take ? ' (in the cut)' : ''}`, 'aria-pressed': t.id === s.take, onclick: () => pick(t) },
+      h('img', { src: `/films/${P.id}/${t.poster}`, alt: `Take ${k + 1}` }))),
+    h('button', { class: 'chip', disabled: running, onclick: () => shoot([s.id]) }, icon('film', 12), s.takes?.length ? 'Another take' : 'Shoot'));
 }
 
 function castPanel() {
@@ -276,6 +330,7 @@ function follow() {
   events.onmessage = e => {
     const d = JSON.parse(e.data);
     P.job = { status: d.status, step: d.step, pct: d.pct };
+    if (/ failed: /.test(d.line || '')) toast(d.line.replace(/^(take for|frame) [\w-]+ failed: /, ''), 'error', 8000);
     clearTimeout(pending);
     pending = setTimeout(() => refresh().catch(() => {}), 150);
     if (d.status !== 'running') { stopEvents(); if (d.status === 'failed') toast(d.error || 'Drawing failed', 'error'); }

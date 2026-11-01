@@ -11,6 +11,8 @@ import crypto from 'crypto';
 import { askJSON, KIND } from './claude.mjs';
 import { generateImage } from './vertex.mjs';
 import { readBrand } from './brands.mjs';
+import { execFile } from 'child_process';
+import { shootClip } from './video.mjs';
 import { proofForPrompt, unsupportedNumbers, listProof } from './proof.mjs';
 
 // what each format asks of the writing and the boards
@@ -244,6 +246,65 @@ ${note ? `Director's note: ${note}` : ''}`;
   return { board: name, box: null, cost: r.cost };
 }
 
+// —— shooting: each storyboard frame becomes the first frame of a short video shot ——
+const ff = args => new Promise((res, rej) => execFile('ffmpeg', ['-v', 'error', '-y', ...args], { timeout: 180000 }, e => (e ? rej(e) : res())));
+// shots that can be filmed: a generated frame to start from; graphics stay brand cards
+export const shootable = s => s.engine !== 'code' && /^boards\/[\w-]+\.png$/.test(s.board || '');
+
+// what the video model is told: what happens, how the camera moves, who is in it, and the look to keep
+function shotPrompt(p, shot) {
+  const cast = (p.cast || []).filter(c => shot.cast?.includes(c.id)), loc = (p.locations || []).find(l => l.id === shot.location);
+  return [shot.action,
+    `Camera: ${shot.size}, ${shot.angle}, ${String(shot.move).toLowerCase()}.`,
+    loc ? `Setting: ${loc.look}` : '',
+    cast.length ? `The people are exactly as in the first frame: ${cast.map(c => `${c.name} (${c.look})`).join('; ')}.` : '',
+    shot.engine === 'presenter' ? 'The person talks naturally to camera.' : '',
+    p.style === 'cinematic' ? 'Photorealistic live action, like a premium TV commercial.' : 'Keep the illustrated look of the first frame, gently brought to life.',
+    'Natural, believable motion. No text, captions, subtitles, logos or watermarks.'].filter(Boolean).join(' ');
+}
+
+// takes per shot, two shots at a time; each take is kept (MP4 and a poster), and a shot's first take is chosen for it
+export async function shootShots(dir, ids, { engine, takes = 1, onTake } = {}) {
+  const queue = ids.flatMap(id => Array.from({ length: takes }, () => id));
+  const worker = async () => {
+    while (queue.length) {
+      const id = queue.shift();
+      const p = read(dir), shot = p.shots.find(s => s.id === id);
+      if (!shot || !shootable(shot)) { onTake?.(id, new Error('This shot needs a generated storyboard frame first.')); continue; }
+      try {
+        const r = await shootClip({ engine, image: { data: fs.readFileSync(path.join(dir, shot.board)), mime: 'image/png' }, prompt: shotPrompt(p, shot), seconds: +shot.dur || 3, aspect: p.aspect });
+        const name = `takes/${shot.id}-${Date.now().toString(36)}`;
+        fs.mkdirSync(path.join(dir, 'takes'), { recursive: true });
+        fs.writeFileSync(path.join(dir, name + '.mp4'), r.mp4);
+        await ff(['-ss', '0.5', '-i', path.join(dir, name + '.mp4'), '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4', path.join(dir, name + '.jpg')]).catch(() => {});
+        const fresh = read(dir), s = fresh.shots.find(x => x.id === id);
+        if (s) {
+          s.takes = [...(s.takes || []), { id: name.slice(6), file: name + '.mp4', poster: name + '.jpg', engine, seconds: r.seconds, cost: r.cost }];
+          s.take = s.take && s.takes.some(t => t.id === s.take) ? s.take : s.takes.at(-1).id;
+          fresh.cost = (fresh.cost || 0) + r.cost;
+          saveProduction(dir, fresh);
+        }
+        onTake?.(id, null);
+      } catch (e) { onTake?.(id, e); }
+    }
+  };
+  await Promise.all(Array.from({ length: 2 }, worker));
+}
+
+// the chosen takes as WebM for the renderer (its headless browser has no H.264), into a film folder: { takeId: 'clips/…webm' }
+export async function clipsInto(dir, p, filmDir) {
+  const out = {};
+  fs.mkdirSync(path.join(filmDir, 'clips'), { recursive: true });
+  for (const s of p.shots) {
+    const t = s.take && s.takes?.find(x => x.id === s.take);
+    if (!t) continue;
+    const name = `clips/${t.id}.webm`;
+    await ff(['-i', path.join(dir, t.file), '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-b:v', '3M', '-g', '6', '-pix_fmt', 'yuv420p', path.join(filmDir, name)]);
+    out[t.id] = name;
+  }
+  return out;
+}
+
 // a few at a time, each frame saved and reported as it lands
 export async function drawBoards(dir, ids, { onShot, onStep, model } = {}) {
   if (STYLES[read(dir).style]?.vertex) { onStep?.('Casting the characters'); await ensureCast(dir).catch(() => {}); }
@@ -284,10 +345,15 @@ export function review(p) {
 }
 
 // —— 4. the animatic: a quick film (templates/animatic) built from the boards ——
-export function animaticScript(p) {
+// clips: { takeId: path } for a rough cut (from clipsInto); without it, the animatic of the frames
+export function animaticScript(p, clips = null) {
   return {
-    title: (p.title || 'Animatic') + ' (animatic)', accent: '#0a84ff', bpm: p.music?.bpm || 96,
-    scenes: p.shots.map((s, i) => ({ type: 'shot', n: i + 1, text: s.super || '', narration: s.vo || '', dur: +s.dur || 2.5, size: s.size, move: s.move, engine: s.engine,
-      board: s.board || null, image: s.product >= 0 ? s.product : undefined, box: s.box || undefined })),
+    title: (p.title || 'Animatic') + (clips ? ' (rough cut)' : ' (animatic)'), accent: '#0a84ff', bpm: p.music?.bpm || 96,
+    scenes: p.shots.map((s, i) => {
+      const t = clips && s.take && s.takes?.find(x => x.id === s.take);
+      return { type: 'shot', n: i + 1, text: s.super || '', narration: s.vo || '', dur: +s.dur || 2.5, size: s.size, move: s.move, engine: s.engine,
+        board: s.board || null, image: s.product >= 0 ? s.product : undefined, box: s.box || undefined,
+        ...(t && clips[t.id] ? { clip: clips[t.id], clipDur: t.seconds } : {}) };
+    }),
   };
 }

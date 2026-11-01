@@ -1,5 +1,6 @@
 // CarePlix Studio (VideoGen): a web app for films, decks and storyboards on top of the Lemo-Opuscar library.
 //   node app/server.mjs   →  http://localhost:5178
+import './lib/localenv.mjs';   // first: local keys must be in place before any module reads its settings
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -14,7 +15,8 @@ import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, log
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
-import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript } from './lib/productions.mjs';
+import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto } from './lib/productions.mjs';
+import { engines, ENGINES } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
@@ -175,7 +177,7 @@ async function api(req, res, url, user) {
   if (parts[0] === 'productions') {
     if (M === 'GET' && parts[1] === 'meta') {
       const v = await vertexStatus();
-      return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok, model: v.model, reason: v.reason } });
+      return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok }, engines: await engines() });
     }
     if (M === 'POST' && !parts[1]) {
       const b = await body(req);
@@ -243,9 +245,13 @@ async function api(req, res, url, user) {
             engine: ['video', 'presenter', 'code', 'product'].includes(s.engine) ? s.engine : 'video', action: text(s.action, 900), vo: text(s.vo), super: text(s.super, 200),
             cast: Array.isArray(s.cast) ? s.cast.map(c => text(c, 12)).slice(0, 6) : [], location: text(s.location, 12),
             product: Number.isInteger(s.product) && s.product >= 0 && s.product < photos ? s.product : -1, proof: Array.isArray(s.proof) ? s.proof.map(x => text(x, 40)).slice(0, 6) : [],
-            board: old?.board || null, box: old?.box || null, fallback: old?.fallback || null };
+            board: old?.board || null, box: old?.box || null, fallback: old?.fallback || null,
+            takes: old?.takes || [], take: old?.takes?.some(t => t.id === s.take) ? s.take : old?.take || null };
         });
-        for (const [sid, s] of keep) if (!p.shots.some(x => x.id === sid) && s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
+        for (const [sid, s] of keep) if (!p.shots.some(x => x.id === sid)) {
+          if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
+          for (const t of s.takes || []) for (const f of [t.file, t.poster]) if (/^takes\/[\w-]+\.(mp4|jpg)$/.test(f || '')) fs.rmSync(path.join(dir, f), { force: true });
+        }
       }
       saveProduction(dir, p);
       if (p.title) writeMeta(dir, { ...readMeta(dir), title: p.title });
@@ -263,6 +269,7 @@ async function api(req, res, url, user) {
       if (limited(res, req, 'script', true)) return;
       for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
       for (const c of p.cast) if (c.ref && /^cast\/[\w-]+\.png$/.test(c.ref)) fs.rmSync(path.join(dir, c.ref), { force: true });
+      fs.rmSync(path.join(dir, 'takes'), { recursive: true, force: true });
       p.concept = b.concept;
       const { p: next } = await writeShots(dir, p, { model: p.model });
       saveProduction(dir, next);
@@ -286,6 +293,38 @@ async function api(req, res, url, user) {
       const fresh = readProduction(dir), s = fresh.shots.find(x => x.id === shot.id);
       if (s) { Object.assign(s, { board: r.board, box: r.box, fallback: r.fallback }); fresh.cost = (fresh.cost || 0) + (r.cost || 0); saveProduction(dir, fresh); }
       return send(res, 200, state());
+    }
+    // shooting: video takes from the storyboard frames, in the background like the frames
+    if (M === 'POST' && parts[2] === 'shoot') {
+      const b = await body(req), engine = ENGINES[b.engine] ? b.engine : 'veo-fast';
+      if (!(await engines()).some(e => e.id === engine)) return send(res, 400, { error: 'That video engine isn’t available on this server.' });
+      const ids = (Array.isArray(b.ids) && b.ids.length ? b.ids : p.shots.map(s => s.id)).filter(x => { const s = p.shots.find(y => y.id === x); return s && shootable(s); });
+      if (!ids.length) return send(res, 400, { error: 'No shot can be filmed yet: shots need an Illustrated or Cinematic frame (graphics stay as cards).' });
+      if (limited(res, req, 'render')) return;
+      if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Something is already running for this production.' });
+      const takes = Math.max(1, Math.min(3, +b.takes || 1)), total = ids.length * takes, job = startJob(id, dir, 'shoot');
+      let done = 0;
+      emit(job, { step: `Shooting ${total} take${total > 1 ? 's' : ''}`, pct: 2 });
+      shootShots(dir, ids, { engine, takes, onTake: (sid, err) => emit(job, { pct: Math.round(100 * ++done / total), step: `Shot ${done} of ${total}` }, err ? `take for ${sid} failed: ${err.message}` : `take ${sid}`) })
+        .then(() => emit(job, { status: 'done', step: 'Takes ready', pct: 100 }))
+        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
+      return send(res, 200, state());
+    }
+    // the rough cut: the chosen takes (and the frames of shots not filmed) as a film to review and export in Create
+    if (M === 'POST' && parts[2] === 'cut') {
+      if (!p.shots.some(s => s.take)) return send(res, 400, { error: 'Shoot at least one shot first.' });
+      const b = await body(req), brand = p.brandId ? readBrand(p.brandId) : null;
+      const film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Rough cut: ${p.title || p.brief.slice(0, 60)}`, voice: b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
+      for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
+        fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
+        fs.copyFileSync(path.join(dir, s.board), path.join(film.dir, s.board));
+      }
+      if (p.media?.length) fs.cpSync(path.join(dir, 'media'), path.join(film.dir, 'media'), { recursive: true });
+      const clips = await clipsInto(dir, p, film.dir);
+      saveContent(film.dir, animaticScript(p, clips), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
+      writeMeta(film.dir, { ...readMeta(film.dir), production: id });
+      writeMeta(dir, { ...readMeta(dir), cut: film.id });
+      return send(res, 200, { id: film.id });
     }
     if (M === 'POST' && parts[2] === 'animatic') {
       if (!p.shots.length) return send(res, 400, { error: 'Board a concept first.' });

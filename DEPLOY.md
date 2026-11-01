@@ -102,6 +102,18 @@ docker compose logs -f videogen     # expect: "VideoGen running at https://… (
 
 Open `https://<DOMAIN>`: the studio opens directly. The Studio tab says Director mode is off on the public site.
 
+## Video shots (Productions)
+
+Storyboard frames become video shots in **Productions → Shoot**. People see three engines by plain names:
+
+| In the app | Engine | Needs |
+|---|---|---|
+| Standard | Veo 3.1 Fast on Vertex AI | nothing: the VM's service account, like the frames |
+| Premium | Veo 3.1 on Vertex AI | nothing |
+| Character | Kling through fal.ai | a fal.ai key: `./deploy/gcp-keys.sh` asks for it (not shown), stores it in the VM's `.env`, restarts the app, and can also save it in `.env.local` for local testing |
+
+A shot needs an Illustrated or Cinematic frame to start from; graphics shots stay brand cards. **Make the rough cut** puts the chosen takes on the timeline with the voice-over and music and opens it in Create. `./deploy/gcp-keys.sh FAL_KEY --off` removes the key.
+
 ## Google sign-in, CarePlix only
 
 In Google Cloud Console, in a project under the **careplix.com** organization (`careplix-labs` is):

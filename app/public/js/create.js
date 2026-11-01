@@ -215,21 +215,23 @@ async function load(first = false) {
   P.canvas = P.frame.contentDocument.querySelector('canvas');
   P.dur = P.win.DUR;
   P.t = first ? 0 : Math.min(keep, P.dur - 0.01);
-  makeThumbs();
+  await makeThumbs();
   drawTimeline(first);
   draw();
   P.snap.hidden = true;
 }
 
-function makeThumbs() {
+// a film page may draw asynchronously (a rough cut seeks its clips), so each frame is awaited before it's copied
+async function makeThumbs() {
   const portrait = film.meta.aspect === '9:16';
-  thumbs = P.win.TL.scenes.map(s => {
-    P.win.render(s.t0 + Math.min(s.dur * 0.6, 2.6));
+  thumbs = [];
+  for (const s of P.win.TL.scenes) {
+    await P.win.render(s.t0 + Math.min(s.dur * 0.6, 2.6));
     const c = document.createElement('canvas');
     c.width = portrait ? 90 : 192; c.height = portrait ? 160 : 108;
     c.getContext('2d').drawImage(P.canvas, 0, 0, c.width, c.height);
-    return c;
-  });
+    thumbs.push(c);
+  }
 }
 
 function drawTimeline(animate) {

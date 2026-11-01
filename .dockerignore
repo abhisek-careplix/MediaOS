@@ -2,6 +2,7 @@ films
 brands
 proof
 uploads
+.env.*
 .env
 .git
 .claude
