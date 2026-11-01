@@ -445,6 +445,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/films/')) return serveFile(req, res, FILMS, p.slice('/films/'.length));
     if (p.startsWith('/fonts/')) return serveFile(req, res, FONTS, p.slice('/fonts/'.length));
     if (p.startsWith('/uploads/')) return serveFile(req, res, UPLOADS, p.slice('/uploads/'.length));
+    if (p === '/shared/logo.js') return serveFile(req, res, path.join(APP, 'templates', 'shared'), 'logo.js');
     if (p.startsWith('/brands/') && !p.endsWith('.json')) return serveFile(req, res, BRANDS, p.slice('/brands/'.length));
     if (p.startsWith('/tpl/')) {
       // a template page outside any film, for live brand previews: /tpl/<template>/<file>

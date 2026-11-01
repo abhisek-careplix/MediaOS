@@ -186,7 +186,7 @@ export function sampleDeck() {
 // —— exports ——
 export async function exportDeck(dir, deck, kinds = ['pptx', 'pdf'], { draft = false } = {}) {
   const brand = deck.brandId ? readBrand(deck.brandId) : null;
-  // logo: a marker so layouts reserve its place; the PDF gets the file itself, PowerPoint a rasterised copy
+  // logo: a marker so layouts reserve its place; renderDeck prepares the real one, and PowerPoint uses what it made
   const theme = brand ? themeFrom({ name: brand.name, colors: brand.colors, fonts: brand.fonts, logo: brand.logo ? 'logo' : null }) : DEFAULT_THEME;
   if (brand) await Promise.all([ensureFont(brand.fonts.display), ensureFont(brand.fonts.body)]);
   else await ensureFont('Inter');
@@ -197,7 +197,7 @@ export async function exportDeck(dir, deck, kinds = ['pptx', 'pdf'], { draft = f
   const r = await renderDeck(deck, theme, { proof, logoFile, draft, pdfFile: kinds.includes('pdf') ? path.join(dir, slug + '.pdf') : null, posterFile: path.join(dir, 'poster.jpg') });
   if (kinds.includes('pdf')) out.pdf = slug + '.pdf';
   if (kinds.includes('pptx')) {
-    await writePptx(deck, theme, { proof, logo: r.logo, draft, file: path.join(dir, slug + '.pptx') });
+    await writePptx(deck, r.theme, { proof, logos: r.logos, draft, file: path.join(dir, slug + '.pptx') });
     out.pptx = slug + '.pptx';
   }
   return out;

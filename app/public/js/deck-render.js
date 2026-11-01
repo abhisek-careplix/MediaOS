@@ -60,11 +60,24 @@ const R = (x, y, w, h, o = {}) => ({ type: 'rect', x, y, w, h, fill: null, line:
 
 export const closingColors = c => lum(c.bg) < lum(c.ink) ? { dark: c.bg, light: c.ink } : { dark: c.ink, light: c.bg };
 
-function chrome(els, slide, theme, ctx, { dark = false } = {}) {
+// The logo in a box at (x, y, w, h) on a background bg. A prepared theme (logoR, logoHist from templates/shared/logo.js)
+// gets the logo trimmed and sized by its visible area, so wordmarks and square marks carry the same weight, and its
+// one-colour version where bg would hide too much of it; otherwise the file is fitted into the box as it is.
+function logoEl(th, x, y, w, h, bg) {
+  if (!th.logoR) return { type: 'image', x, y, w, h, src: th.logo, variant: 'logo', fit: 'contain-left' };
+  let lh = Math.min(h * 1.5, Math.sqrt(w * h / th.logoR)), lw = lh * th.logoR;
+  if (lw > w) { lw = w; lh = lw / th.logoR; }
+  const l = lum(bg), cr = v => (Math.max(v, l) + 0.05) / (Math.min(v, l) + 0.05);
+  const lost = th.logoHist.reduce((s, v, i) => s + (v && cr((i + 0.5) / 64) < 1.6 ? v : 0), 0);
+  const variant = lost <= 0.18 ? 'logo' : l < 0.4 ? 'light' : 'dark';
+  return { type: 'image', x, y: y + (h - lh) / 2, w: lw, h: lh, src: { logo: th.logo, light: th.logoLight, dark: th.logoDark }[variant], variant, fit: 'contain-left' };
+}
+
+function chrome(els, slide, theme, ctx, { dark = false, bg = theme.colors.bg } = {}) {
   const c = theme.colors, fg = dark ? closingColors(c).light : c.muted;
   // exported despite failed checks: say so on every slide
   if (ctx.draft) els.push(T(W - M - 420, 20, 420, 20, 'DRAFT · contains unverified claims', { font: 'mono', size: 12, weight: 700, color: '#d92d20', align: 'right', spacing: 0.08 }));
-  if (theme.logo && slide.layout !== 'title' && slide.layout !== 'closing') els.push({ type: 'image', x: M, y: H - 52, w: 140, h: 24, src: theme.logo, fit: 'contain-left' });
+  if (theme.logo && slide.layout !== 'title' && slide.layout !== 'closing') els.push(logoEl(theme, M, H - 52, 140, 24, bg));
   els.push(T(W - M - 80, H - 50, 80, 20, `${ctx.index + 1}`, { size: 12, color: fg, align: 'right', font: 'mono' }));
   // the sources behind the claims on this slide
   const notes = (slide.proof || []).map(id => ctx.proof?.[id]).filter(Boolean);
@@ -91,7 +104,7 @@ const L = {
     els.push(R(W - 420, -120, 560, 560, { fill: mix(c.accent, c.bg, 0.86), radius: 280 }));
     els.push(R(W - 250, 380, 300, 300, { fill: mix(c.accent, c.bg, 0.72), radius: 150 }));
     els.push(R(M, 236, 8, 220, { fill: c.accent, radius: 4 }));
-    if (th.logo) els.push({ type: 'image', x: M, y: 64, w: 220, h: 44, src: th.logo, fit: 'contain-left' });
+    if (th.logo) els.push(logoEl(th, M, 64, 220, 44, c.bg));
     if (s.kicker) els.push(T(M + 36, 236, 760, 22, String(s.kicker).toUpperCase(), { font: 'mono', size: 14, weight: 600, color: c.accent, spacing: 0.12 }));
     const ts = fitSize(s.title, 800, 170, 68, 36, 'display', 1.04);
     els.push(T(M + 36, 268, 800, 170, s.title, { font: 'display', size: ts, weight: 700, color: c.ink, lh: 1.04, spacing: -0.02, valign: 'top' }));
@@ -213,8 +226,8 @@ const L = {
     // always a dark stage: the brand's own background when it is dark, its text colour when the brand is light
     const c = th.colors, { dark, light } = closingColors(c), els = [R(0, 0, W, H, { fill: dark })];
     els.push(R(W - 360, H - 360, 520, 520, { fill: mix(c.accent, dark, 0.35), radius: 260 }));
-    // the logo was made for the brand's background, so it only appears when that is the stage
-    if (th.logo && dark === c.bg) els.push({ type: 'image', x: M, y: 64, w: 220, h: 44, src: th.logo, fit: 'contain-left' });
+    // a prepared logo turns one-colour where the stage would hide it; an unprepared one only appears on the brand's own background
+    if (th.logo && (th.logoR || dark === c.bg)) els.push(logoEl(th, M, 64, 220, 44, dark));
     if (s.kicker) els.push(T(M, 220, 900, 22, String(s.kicker).toUpperCase(), { font: 'mono', size: 14, weight: 600, color: c.accent, spacing: 0.12 }));
     els.push(T(M, 254, 900, 170, s.title, { font: 'display', size: fitSize(s.title, 900, 170, 62, 32, 'display', 1.05), weight: 700, color: light, lh: 1.05, spacing: -0.02 }));
     if (s.body) els.push(T(M, 440, 820, 90, s.body, { size: fitSize(s.body, 820, 90, 24, 14, 'body', 1.4), color: mix(light, dark, 0.25), lh: 1.4 }));
@@ -226,7 +239,9 @@ const L = {
 export function layoutSlide(slide, theme, ctx = {}) {
   const fn = L[slide.layout] || L.statement;
   const els = fn(slide, theme);
-  chrome(els, slide, theme, ctx, { dark: slide.layout === 'closing' });
+  // the background is the full-slide rectangle each layout starts with
+  const bg = els.find(e => e.type === 'rect' && !e.x && !e.y && e.w === W && e.h === H)?.fill || theme.colors.bg;
+  chrome(els, slide, theme, ctx, { dark: slide.layout === 'closing', bg });
   return els;
 }
 

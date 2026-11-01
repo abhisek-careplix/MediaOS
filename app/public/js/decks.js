@@ -47,6 +47,14 @@ function themeFor(brandId) {
 }
 // slides must be measured in their real fonts, never a fallback
 const fontsFor = theme => Promise.all([useFont(theme.fonts.display), useFont(theme.fonts.body)]).catch(() => {});
+// the logo trimmed, with one-colour versions for backgrounds that would hide it (made once per logo, as for films)
+const logos = new Map();
+async function logoReady(theme) {
+  if (!theme.logo) return theme;
+  if (!logos.has(theme.logo)) logos.set(theme.logo, import('/shared/logo.js').then(async m => m.logoAssets(await m.loadLogo(theme.logo))).catch(() => null));
+  const a = await logos.get(theme.logo);
+  return a ? { ...theme, logo: a.logo, logoLight: a.light, logoDark: a.dark, logoR: a.r, logoHist: a.hist } : theme;
+}
 const proofMap = () => Object.fromEntries((app.proof || []).map(e => [e.id, e]));
 
 function slideView(slide, theme, index, scale, extra = '') {
@@ -157,7 +165,7 @@ async function writeAll() {
 // —— editor ——
 async function editor() {
   await loadProof().catch(() => {});
-  const theme = themeFor(D.deck.brandId);
+  const theme = await logoReady(themeFor(D.deck.brandId));
   D.theme = theme;
   await fontsFor(theme);
   const status = h('span', { class: 'faint' }, D.took ? `Written in ${D.took.toFixed(0)} s${D.cost ? ` · $${D.cost.toFixed(3)}` : ''}` : '');

@@ -6,8 +6,8 @@ const IN = px => px / 96;          // the 1280×720 canvas maps onto a 13.33×7.
 const PT = px => +(px * 0.75).toFixed(1);
 const hex = c => String(c || '#000000').replace('#', '').toUpperCase();
 
-// theme: deck theme; logo: { data: 'image/png;base64,…', w, h } already rasterised, or null
-export async function writePptx(deck, theme, { proof = {}, logo = null, file, draft = false }) {
+// theme: the deck theme the PDF was laid out with; logos: { logo, light, dark } → { data: 'image/png;base64,…', w, h }, or null
+export async function writePptx(deck, theme, { proof = {}, logos = null, file, draft = false }) {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
   pptx.title = deck.title || 'Deck';
@@ -34,9 +34,9 @@ export async function writePptx(deck, theme, { proof = {}, logo = null, file, dr
         if (e.bullets) {
           s.addText(e.bullets.map(b => ({ text: b, options: { bullet: { characterCode: '25CF', indent: PT(e.size) * 1.1 }, paraSpaceAfter: PT(e.size) * 0.6, breakLine: true } })), { ...box, ...base });
         } else if (e.text) s.addText(e.text, { ...box, ...base });
-      } else if (e.type === 'image' && logo) {
+      } else if (e.type === 'image' && logos?.[e.variant || 'logo']) {
         // fit the logo inside the box, aligned left like the preview
-        const r = logo.w / logo.h;
+        const logo = logos[e.variant || 'logo'], r = logo.w / logo.h;
         let w = e.w, hgt = e.w / r;
         if (hgt > e.h) { hgt = e.h; w = hgt * r; }
         s.addImage({ data: logo.data, x: IN(e.x), y: IN(e.y + (e.h - hgt) / 2), w: IN(w), h: IN(hgt) });
