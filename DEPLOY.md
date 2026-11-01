@@ -102,15 +102,13 @@ docker compose logs -f videogen     # expect: "VideoGen running at https://… (
 
 Open `https://<DOMAIN>`: the studio opens directly. The Studio tab says Director mode is off on the public site.
 
-## Later: Google sign-in, CarePlix only
+## Google sign-in, CarePlix only
 
-In Google Cloud Console, in a project under the **careplix.com** organization:
+In Google Cloud Console, in a project under the **careplix.com** organization (`careplix-labs` is):
 
-1. **APIs & Services → OAuth consent screen**: user type **Internal**. Only accounts in the CarePlix Google Workspace can then reach the consent screen at all. App name "VideoGen Studio"; scopes `openid`, `email`, `profile`.
-2. **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web application**.
-   - Authorized JavaScript origins: `https://videogen.careplix.com`
-   - Authorized redirect URIs: `https://videogen.careplix.com/auth/google/callback`
-3. Copy the client ID and client secret.
+1. **Google Auth Platform → Branding / Audience** (formerly "OAuth consent screen"): user type **Internal**, so only accounts in the CarePlix Google Workspace can reach the consent screen at all. App name "VideoGen Studio"; scopes `openid`, `email`, `profile`.
+2. **Google Auth Platform → Clients → Create client**, type **Web application**, with the authorized redirect URI `https://<DOMAIN>/auth/google/callback` (today `https://34-134-160-18.sslip.io/auth/google/callback`; `gcp-signin.sh` prints it).
+3. Run `./deploy/gcp-signin.sh` and paste the client ID and secret when asked (the secret isn't shown). It sets the variables below on the VM, creates a session key if there isn't one, restarts the app and checks the site now asks for sign-in. `./deploy/gcp-signin.sh --off` goes back to an open site. Later deploys keep sign-in on.
 
 The server enforces the domain a second time, independently of the consent screen. It accepts an ID token only when:
 - its signature checks out against Google's published keys;

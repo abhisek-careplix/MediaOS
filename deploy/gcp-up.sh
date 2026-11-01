@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy VideoGen as an open website (no sign-in) on Google Cloud: one VM with Docker, HTTPS by Caddy.
+# Deploy VideoGen on Google Cloud: one VM with Docker, HTTPS by Caddy. A first deploy is an open website (no sign-in);
+# ./deploy/gcp-signin.sh turns CarePlix Google sign-in on, and later deploys keep it on.
 # Run it again to ship updates; the server's .env and its films and brand kits are kept.
 #
 #   ./deploy/gcp-up.sh                                 asks for the Anthropic API key (stored only on the VM), then deploys
@@ -90,7 +91,7 @@ cd ~/videogen
 setenv() { if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi; }
 setenv DOMAIN "$VG_DOMAIN"
 setenv PUBLIC_URL "https://$VG_DOMAIN"
-setenv OPEN_ACCESS 1
+setenv OPEN_ACCESS 1   # ignored by the server once Google sign-in is configured
 [ -n "$VG_KEY" ] && setenv ANTHROPIC_API_KEY "$VG_KEY"
 chmod 600 .env
 grep -q '^ANTHROPIC_API_KEY=.' .env || echo "! No ANTHROPIC_API_KEY on the server yet: sample films work, Claude-written scripts won't. Re-run with ANTHROPIC_API_KEY=… set."
@@ -109,7 +110,10 @@ fi
 say "7/7  Waiting for https://$DOMAIN"
 if [ -z "$DRY" ]; then
   for i in $(seq 1 60); do
-    curl -fsS -o /dev/null "https://$DOMAIN/api/me" 2>/dev/null && { say "✓ VideoGen is live: https://$DOMAIN"; break; }
+    # 200: an open site; 401: sign-in is on (every route needs a CarePlix session)
+    code=$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/me" 2>/dev/null || true)
+    [ "$code" = 200 ] && { say "✓ VideoGen is live: https://$DOMAIN (open, no sign-in)"; break; }
+    [ "$code" = 401 ] && { say "✓ VideoGen is live: https://$DOMAIN (CarePlix Google sign-in)"; break; }
     [ "$i" = 60 ] && { echo "Not answering yet. Watch the logs:"; echo "  gcloud --project $PROJECT compute ssh $NAME --zone $ZONE --command 'cd videogen && sudo docker compose logs -f'"; exit 1; }
     sleep 10
   done
