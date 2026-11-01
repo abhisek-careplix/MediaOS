@@ -43,6 +43,11 @@ function all() {
 
 // an approved version whose proof has moved on is no longer approved: record that once, when first seen
 function settle(r) {
+  // a check cut off by a restart never finishes on its own
+  if (r.checks?.status === 'running' && Date.now() - new Date(r.checks.startedAt || r.submittedAt) > 15 * 60e3) {
+    r.checks = { status: 'failed', items: [], error: 'The check was interrupted. Run it again.' };
+    save(r);
+  }
   if (r.status !== 'approved' || !r.checks?.proofs?.length) return r;
   const drift = proofDrift(r.checks.proofs);
   if (!drift.length) return r;
@@ -121,7 +126,7 @@ export function submit(assetId, note, user) {
     id, asset: { id: assetId, mode: m.mode, kind: m.kind || (deck ? 'deck' : 'film'), title: m.filmTitle || m.title || 'Untitled', brandId: m.brandId || null, aspect: m.aspect || null, owner: m.owner, ownerName: m.ownerName || null },
     version: { n: prior.length + 1, kind: deck ? 'deck' : 'video', media, poster, hash, source: file, lines, cited: [...new Set(cited)], given },
     submittedBy: { email: user.email, name: user.name || user.email }, submittedAt: now(), note: String(note || '').slice(0, 2000),
-    status: 'in-review', steps: STEPS.map(role => ({ role, status: 'pending' })), checks: { status: 'running', items: [] }, overrides: [], comments: [],
+    status: 'in-review', steps: STEPS.map(role => ({ role, status: 'pending' })), checks: { status: 'running', items: [], startedAt: now() }, overrides: [], comments: [],
   };
   // a newer version replaces one that came back with changes
   if (busy) { busy.status = 'superseded'; busy.supersededBy = id; save(busy); }
@@ -150,7 +155,7 @@ function check(id) {
 export function recheck(id, user) {
   const r = loadReview(id);
   if (!abilities(r, user).recheck) throw err('Only the submitter or a reviewer can run the check again, while it is in review.', 403);
-  r.checks = { status: 'running', items: [] };
+  r.checks = { status: 'running', items: [], startedAt: now() };
   save(r);
   check(id);
   audit('review.recheck', { target: id });

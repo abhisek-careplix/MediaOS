@@ -27,6 +27,7 @@ export function startJob(id, dir, kind) {
   return job;
 }
 export const getJob = id => jobs.get(id);
+export const runningJobs = () => [...jobs.values()].filter(j => j.status === 'running');
 
 function snapshot(job) {
   const { id, kind, status, step, pct, output, error, started } = job;

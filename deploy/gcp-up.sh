@@ -8,7 +8,7 @@
 #   DRY_RUN=1 ./deploy/gcp-up.sh                       print what it would do, change nothing
 #
 # Settings (environment): PROJECT (careplix-labs), REGION (us-central1), ZONE (us-central1-a), MACHINE (e2-standard-8),
-# NAME (videogen), DISK (100GB), DOMAIN (default: <ip>.sslip.io, which needs no DNS setup).
+# NAME (videogen), DISK (100GB), DOMAIN (default: <ip>.sslip.io, which needs no DNS setup), BUCKET (<project>-studio-media).
 set -euo pipefail
 
 PROJECT=${PROJECT:-careplix-labs}
@@ -64,6 +64,10 @@ if [ -z "$DRY" ] && ! gcloud --project "$PROJECT" compute instances describe "$N
   gc compute instances start "$NAME" --zone "$ZONE"
 fi
 
+# films, brand kits, proof and the audit trail are backed up to a private, versioned bucket (deploy/gcp-storage.sh)
+BUCKET=${BUCKET:-$PROJECT-studio-media}
+if [ -z "$DRY" ]; then PROJECT=$PROJECT REGION=$REGION ZONE=$ZONE NAME=$NAME BUCKET=$BUCKET "$HERE/deploy/gcp-storage.sh"; else echo "+ deploy/gcp-storage.sh (gs://$BUCKET)"; fi
+
 say "5/7  Packaging the app"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -93,17 +97,20 @@ setenv DOMAIN "$VG_DOMAIN"
 setenv PUBLIC_URL "https://$VG_DOMAIN"
 setenv OPEN_ACCESS 1   # ignored by the server once Google sign-in is configured
 [ -n "$VG_KEY" ] && setenv ANTHROPIC_API_KEY "$VG_KEY"
+setenv MEDIA_BUCKET "$VG_BUCKET"
 chmod 600 .env
 grep -q '^ANTHROPIC_API_KEY=.' .env || echo "! No ANTHROPIC_API_KEY on the server yet: sample films work, Claude-written scripts won't. Re-run with ANTHROPIC_API_KEY=… set."
-sudo docker compose up -d --build
+sudo docker compose build
+echo "  switching over: renders and shoots already running finish first (up to 15 minutes)"
+sudo docker compose up -d
 sudo docker compose ps
 SH
 )
 if [ -n "$DRY" ]; then
-  echo "+ gcloud compute ssh $NAME --zone $ZONE --command 'bash -s'   <<  (VG_DOMAIN=$DOMAIN, VG_KEY=${ANTHROPIC_API_KEY:+<set>})"
+  echo "+ gcloud compute ssh $NAME --zone $ZONE --command 'bash -s'   <<  (VG_DOMAIN=$DOMAIN, VG_BUCKET=$BUCKET, VG_KEY=${ANTHROPIC_API_KEY:+<set>})"
   printf '%s\n' "$REMOTE" | sed 's/^/    /'
 else
-  { printf 'VG_DOMAIN=%q\nVG_KEY=%q\n' "$DOMAIN" "${ANTHROPIC_API_KEY:-}"; printf '%s\n' "$REMOTE"; } |
+  { printf 'VG_DOMAIN=%q\nVG_BUCKET=%q\nVG_KEY=%q\n' "$DOMAIN" "$BUCKET" "${ANTHROPIC_API_KEY:-}"; printf '%s\n' "$REMOTE"; } |
     gcloud --project "$PROJECT" compute ssh "$NAME" --zone "$ZONE" --quiet --command 'bash -s'
 fi
 

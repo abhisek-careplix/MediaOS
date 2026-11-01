@@ -1,6 +1,8 @@
-// Studio voices: human-sounding speech for narration and for the cast (lib/fal.mjs, FAL_KEY). Each line is recorded once
-// and kept by what it is (voice, words, model), so a talking shot made from a line and the film that plays it use the
-// very same recording. Without the key, films fall back to the built-in offline voices (lib/templates.mjs VOICES).
+// Studio voices: human-sounding speech for narration and for the cast (lib/fal.mjs, FAL_KEY). A line can carry a delivery
+// direction, as a director would give a voice actor ("conversational, a little hushed, like sharing a tip"): the
+// expressive model performs it rather than reading it, which is what takes it from text-to-speech to acting. Each line is
+// recorded once and kept by what it is (voice, words, direction, model), so a talking shot made from a line and the film
+// that plays it use the very same recording. Without the key, films fall back to the built-in offline voices (lib/templates.mjs VOICES).
 // Settings (environment): VOICE_MODEL (the speech endpoint).
 import fs from 'fs';
 import path from 'path';
@@ -9,7 +11,9 @@ import { execFile } from 'child_process';
 import { falReady, run, fetchFile } from './fal.mjs';
 import { billed } from './ledger.mjs';
 
-const MODEL = process.env.VOICE_MODEL || 'fal-ai/elevenlabs/tts/multilingual-v2';
+const MODEL = process.env.VOICE_MODEL || 'fal-ai/elevenlabs/tts/eleven-v3';
+// the expressive model takes directions in square brackets and fewer settings
+const EXPRESSIVE = /eleven-v3/.test(MODEL);
 // id → the name people see, a short tag and who it sounds like (for the pickers and the writer), the provider's voice, and the offline
 // voice that stands in when the service can't be reached
 export const STUDIO_VOICES = {
@@ -36,17 +40,21 @@ export const studioVoiceList = () => (studioReady() ? Object.entries(STUDIO_VOIC
 
 const ff = args => new Promise((res, rej) => execFile('ffmpeg', ['-v', 'error', '-y', ...args], { timeout: 120000 }, e => (e ? rej(e) : res())));
 const durOf = file => new Promise((res, rej) => execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], (e, out) => (e ? rej(e) : res(Math.round(+out * 1000) / 1000))));
-export const lineKey = (voice, text) => crypto.createHash('sha1').update([MODEL, voice, text.trim()].join('|')).digest('hex').slice(0, 16);
+export const lineKey = (voice, text, delivery = '') => crypto.createHash('sha1').update([MODEL, voice, text.trim(), ...(delivery ? [delivery.trim()] : [])].join('|')).digest('hex').slice(0, 16);
+// a direction as the expressive model reads it: one bracketed note, no brackets inside
+const direction = d => String(d || '').replace(/[\[\]]/g, '').trim().slice(0, 160);
 
 // One line → { file (absolute WAV, 44.1 kHz mono, silence trimmed), dur, cost, cached }, kept in cacheDir by its key
-export async function speak({ text, voice, cacheDir }) {
+export async function speak({ text, voice, delivery = '', cacheDir }) {
   const v = STUDIO_VOICES[voice];
   if (!v) throw new Error('Unknown studio voice.');
   const words = String(text || '').trim();
   if (!words) throw new Error('Nothing to say.');
-  const file = path.join(cacheDir, `${lineKey(voice, words)}.wav`);
+  const how = EXPRESSIVE ? direction(delivery) : '';
+  const file = path.join(cacheDir, `${lineKey(voice, words, how)}.wav`);
   if (fs.existsSync(file)) return { file, dur: await durOf(file), cost: 0, cached: true };
-  const out = await run(MODEL, { text: words, voice: v.v, stability: 0.45, similarity_boost: 0.8, style: 0.2, speed: 1, apply_text_normalization: 'auto' }, { minutes: 3 });
+  const out = await run(MODEL, EXPRESSIVE ? { text: how ? `[${how}] ${words}` : words, voice: v.v, stability: 0.5, apply_text_normalization: 'auto' }
+    : { text: words, voice: v.v, stability: 0.45, similarity_boost: 0.8, style: 0.2, speed: 1, apply_text_normalization: 'auto' }, { minutes: 3 });
   const mp3 = await fetchFile(out.audio?.url);
   fs.mkdirSync(cacheDir, { recursive: true });
   const tmp = file + '.src';

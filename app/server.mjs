@@ -8,7 +8,8 @@ import crypto from 'crypto';
 import { execFileSync } from 'child_process';
 import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
-import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog } from './lib/jobs.mjs';
+import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog, runningJobs } from './lib/jobs.mjs';
+import { startSync, syncNow, serveFromCloud } from './lib/storage.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
 import { studioVoiceList, isStudioVoice, STUDIO_VOICES, studioReady, speak } from './lib/voice.mjs';
 import { writeScript, runDirector, writeBrand } from './lib/claude.mjs';
@@ -16,7 +17,7 @@ import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, log
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
-import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf } from './lib/productions.mjs';
+import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf, takeFor } from './lib/productions.mjs';
 import { talkingReady } from './lib/video.mjs';
 import { soundReady } from './lib/sound.mjs';
 import { engines, ENGINES, lengthFor } from './lib/video.mjs';
@@ -101,8 +102,10 @@ function serveFile(req, res, root, rel) {
   const p = path.resolve(root, '.' + path.sep + decodeURIComponent(rel));
   if (p !== root && !p.startsWith(root + path.sep)) return send(res, 403, 'outside root', 'text/plain');
   fs.stat(p, (e, st) => {
-    if (e || !st.isFile()) return send(res, 404, 'not found', 'text/plain');
     const type = TYPES[path.extname(p).toLowerCase()] || 'application/octet-stream';
+    // not on this disk: the Cloud Storage copy, if there is one
+    if (e || !st.isFile()) return serveFromCloud(req, res, root, path.relative(root, p), type).then(ok => ok || send(res, 404, 'not found', 'text/plain'))
+      .catch(err => { console.error('[storage]', err.message); if (!res.headersSent) send(res, 404, 'not found', 'text/plain'); });
     const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
     if (range) {
       const a = range[1] ? +range[1] : 0, b = range[2] ? Math.min(+range[2], st.size - 1) : st.size - 1;
@@ -243,7 +246,8 @@ async function api(req, res, url, user) {
       const b = await body(req), keep = new Map(p.shots.map(s => [s.id, s]));
       const text = (v, n = 600) => String(v ?? '').slice(0, n);
       if (b.title != null) p.title = text(b.title, 120);
-      if (b.style && STYLES[b.style]) {
+      if (b.style && STYLES[b.style] && b.style !== p.style) {
+        if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Wait until the current work finishes before changing the frame style.' });
         if (STYLES[b.style].vertex && !(await vertexStatus()).ok) return send(res, 400, { error: 'Generated frames aren’t available on this server right now.' });
         p.style = b.style;
       }
@@ -260,7 +264,7 @@ async function api(req, res, url, user) {
           const old = keep.get(s.id);
           return { id: old ? old.id : 's' + Math.random().toString(36).slice(2, 8), size: text(s.size, 40), angle: text(s.angle, 80), move: text(s.move, 40), dur: Math.max(0.5, Math.min(12, +s.dur || 2.5)),
             engine: ['video', 'presenter', 'code', 'product'].includes(s.engine) ? s.engine : 'video', action: text(s.action, 900), vo: text(s.vo), super: text(s.super, 200),
-            speaker: p.cast.some(c => c.id === s.speaker) ? s.speaker : 'narrator', line: old?.line || null,
+            speaker: p.cast.some(c => c.id === s.speaker) ? s.speaker : 'narrator', delivery: text(s.delivery, 160), ambience: text(s.ambience, 300), line: old?.line || null,
             cast: Array.isArray(s.cast) ? s.cast.map(c => text(c, 12)).slice(0, 6) : [], location: text(s.location, 12),
             product: Number.isInteger(s.product) && s.product >= 0 && s.product < photos ? s.product : -1, proof: Array.isArray(s.proof) ? s.proof.map(x => text(x, 40)).slice(0, 6) : [],
             board: old?.board || null, box: old?.box || null, fallback: old?.fallback || null,
@@ -348,7 +352,7 @@ async function api(req, res, url, user) {
         fs.mkdirSync(path.join(film.dir, path.dirname(rel)), { recursive: true });
         fs.copyFileSync(path.join(dir, rel), path.join(film.dir, rel));
       };
-      for (const s of q.shots) { carry(s.line?.file); carry(s.takes?.find(t => t.id === s.take)?.sound); }
+      for (const s of q.shots) { carry(s.line?.file); carry(takeFor(s)?.sound); }
       carry(score);
       for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
         fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
@@ -365,9 +369,8 @@ async function api(req, res, url, user) {
     if (M === 'POST' && parts[2] === 'voice-sample') {
       const b = await body(req);
       if (!isStudioVoice(b.voice) || !studioReady()) return send(res, 400, { error: 'Studio voices aren’t available on this server.' });
-      const who = p.cast.find(c => c.id === b.cast), line = who && p.shots.find(s => s.speaker === who.id && s.vo?.trim())?.vo;
-      const firstVo = !who && p.shots.find(s => s.speaker === 'narrator' && s.vo?.trim())?.vo;
-      const r = await speak({ text: line || firstVo || `Hi, I'm ${STUDIO_VOICES[b.voice].name}. This is how I sound in your film.`, voice: b.voice, cacheDir: path.join(dir, 'voicecache') });
+      const who = p.cast.find(c => c.id === b.cast), shot = p.shots.find(s => s.speaker === (who ? who.id : 'narrator') && s.vo?.trim());
+      const r = await speak({ text: shot?.vo || `Hi, I'm ${STUDIO_VOICES[b.voice].name}. This is how I sound in your film.`, voice: b.voice, delivery: shot?.delivery || '', cacheDir: path.join(dir, 'voicecache') });
       if (!r.cached) { const fresh = readProduction(dir); fresh.cost = (fresh.cost || 0) + r.cost; saveProduction(dir, fresh); }
       return send(res, 200, { url: `/films/${id}/voicecache/${path.basename(r.file)}` });
     }
@@ -670,6 +673,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p.startsWith('/api/')) {
+      // while a deploy waits for running work to finish, nothing new starts (comments and sign-offs still go through)
+      if (draining && req.method === 'POST' && !GOVERNED.has(p.split('/')[2])) return send(res, 503, { error: 'The studio is updating. Running work is finishing first; try again in a few minutes.' });
       // roles and monthly caps first; then the request runs as this person, so the ledger and the audit trail know who
       const no = writeGate(req.method, p, user);
       if (no) return send(res, no.code, { error: no.error });
@@ -694,3 +699,19 @@ const server = http.createServer(async (req, res) => {
   }
 });
 server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));
+startSync();
+
+// a deploy (or Ctrl-C) stops the server: running renders and shoots finish first, for up to DRAIN_MINUTES (15), while
+// new work is refused; then a last backup and exit. A second signal stops at once.
+let draining = false;
+async function drain(signal) {
+  if (draining) process.exit(0);
+  draining = true;
+  const until = Date.now() + (+process.env.DRAIN_MINUTES || 15) * 60e3;
+  if (runningJobs().length) console.log(`${signal}: letting ${runningJobs().length} running job(s) finish before stopping; new work is refused meanwhile.`);
+  while (runningJobs().length && Date.now() < until) await new Promise(r => setTimeout(r, 2000));
+  await syncNow().catch(e => console.error('[storage]', e.message));
+  process.exit(0);
+}
+process.on('SIGTERM', () => drain('SIGTERM'));
+process.on('SIGINT', () => drain('SIGINT'));

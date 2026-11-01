@@ -1,6 +1,6 @@
 // Team: who may do what (lib/team.mjs). Anyone at CarePlix who signs in can make things; sign-offs and caps need the
 // roles below, which an admin gives here.
-import { h, api, icon, toast, app } from './core.js';
+import { h, api, icon, toast, app, timeAgo } from './core.js';
 
 let root;
 export function mountTeam(el) { root = el; }
@@ -37,5 +37,31 @@ export async function showTeam() {
       t.people.length ? t.people.map(row) : h('small', { class: 'faint' }, t.local ? 'Running locally: you hold every role.' : 'Nobody has been given a role yet.'),
       admin ? h('div', { class: 'tm-add' }, h('b', {}, 'Add someone'), h('div', { class: 'row2' }, email, name), freshChips,
         h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => save(email.value, name.value, fresh) }, icon('plus', 14), 'Add'))) : null),
+    admin ? storageCard() : null,
     h('p', { class: 'faint' }, 'Your roles: ', t.me.roles.map(r => t.roles[r]?.name).join(', ') || 'none (view only)')));
+}
+
+// admins: the Cloud Storage backup and the server's disk
+function storageCard() {
+  const card = h('div', { class: 'sp-card' }, h('div', { class: 'section-head' }, h('b', {}, 'Storage')), h('small', { class: 'faint' }, 'Loading…'));
+  const gb = n => n < 1e9 ? Math.round(n / 1e6) + ' MB' : (n / 1e9).toFixed(1) + ' GB';
+  const paint = s => {
+    const d = s.disk, used = d ? 1 - d.free / d.total : null, last = s.lastSync;
+    card.replaceChildren(
+      h('div', { class: 'section-head' }, h('b', {}, 'Storage'), h('span', { class: 'badge ' + (!s.on ? 'failed' : last?.errorCount ? 'warn' : last ? 'done' : '') }, !s.on ? 'Not backed up' : s.syncing ? 'Backing up…' : last?.errorCount ? `${last.errorCount} problem${last.errorCount > 1 ? 's' : ''}` : last ? 'Backed up' : 'First backup soon')),
+      h('div', { class: 'stats' },
+        h('div', { class: 'stat' }, h('b', {}, s.on ? s.files.toLocaleString() : '—'), h('span', {}, 'files in Cloud Storage')),
+        h('div', { class: 'stat' }, h('b', {}, s.on ? gb(s.bytes) : '—'), h('span', {}, 'stored')),
+        h('div', { class: 'stat' }, h('b', {}, last ? timeAgo(last.at) : '—'), h('span', {}, s.on ? `last backup · every ${s.everyMinutes} min` : 'last backup')),
+        h('div', { class: 'stat' + (used > 0.85 ? ' over' : '') }, h('b', {}, d ? Math.round(used * 100) + '%' : '—'), h('span', {}, d ? `of ${gb(d.total)} disk used` : 'disk'))),
+      s.on ? h('small', { class: 'faint' }, `Films, brand kits, proof, uploads, reviews and the audit trail are copied to the private bucket gs://${s.bucket}/${s.prefix}, keeping deleted and changed files for 30 days.`)
+        : h('small', { class: 'faint' }, 'Set MEDIA_BUCKET on the server to back everything up to Cloud Storage.'),
+      ...(last?.errors || []).slice(0, 3).map(e => h('small', { class: 'err' }, e)),
+      s.on ? h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: async ev => {
+        ev.target.disabled = true;
+        try { paint(await api('storage/sync', { method: 'POST' })); toast('Backed up.', 'ok'); } catch (e) { toast(e.message, 'error'); ev.target.disabled = false; }
+      } }, 'Back up now')) : null);
+  };
+  api('storage').then(paint).catch(() => card.remove());
+  return card;
 }

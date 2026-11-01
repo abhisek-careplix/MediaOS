@@ -38,14 +38,26 @@ export async function shootClip({ engine, image, prompt, seconds, aspect = '16:9
 }
 
 // —— talking shots: a person in a frame speaks a recorded line, lips, face and body in time with it ——
-const TALK_MODEL = process.env.TALK_MODEL || 'fal-ai/bytedance/omnihuman/v1.5';
+// The first model usually takes 2-4 minutes; when it stalls or fails, the second takes over (an unpaid account or a
+// safety block isn't retried).
+const TALKERS = [
+  { model: process.env.TALK_MODEL || 'fal-ai/bytedance/omnihuman/v1.5', rate: 0.16, minutes: 10, input: { resolution: '720p' } },
+  { model: process.env.TALK_FALLBACK_MODEL || 'fal-ai/kling-video/ai-avatar/v2/pro', rate: 0.115, minutes: 15, input: {} },
+];
 export const talkingReady = () => falReady();
 // { image: { data, mime }, audio: { data, mime }, prompt } → { mp4 (with the line as its sound), seconds, cost }
 export async function performClip({ image, audio, prompt }) {
   const [image_url, audio_url] = await Promise.all([upload({ ...image, name: 'frame.png' }), upload({ ...audio, name: 'line.wav' })]);
-  const out = await run(TALK_MODEL, { image_url, audio_url, prompt, resolution: '720p' }, { minutes: 15 });
-  const seconds = +out.duration || 0;
-  return billed('video', { mp4: await fetchFile(out.video?.url), seconds, cost: seconds * 0.16 }, { engine: 'Talking' });
+  for (const [k, t] of TALKERS.entries()) {
+    try {
+      const out = await run(t.model, { image_url, audio_url, prompt, ...t.input }, { minutes: t.minutes });
+      const seconds = +out.duration || 0;
+      return billed('video', { mp4: await fetchFile(out.video?.url), seconds, cost: seconds * t.rate }, { engine: 'Talking' });
+    } catch (e) {
+      if (k === TALKERS.length - 1 || e.code === 402 || /safety/i.test(e.message)) throw e;
+      console.error('talking shot: trying the second model;', e.detail || e.message);
+    }
+  }
 }
 
 // —— Veo: a long-running prediction, polled until the video is ready (about a minute) ——

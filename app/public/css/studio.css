@@ -696,6 +696,7 @@ details.hood pre { margin: 10px 0 0; max-height: 360px; overflow: auto; backgrou
 .take-check.good { background: var(--green); }
 .take-check.fair { background: var(--orange); }
 .take-check.poor { background: var(--red); }
+.take.stale img { filter: grayscale(1); opacity: .5; }
 
 /* —— review, spend and team (Phase A: sign-offs, caps and roles) —— */
 .nav-count { margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--blue); color: #fff; font-size: 11px; font-style: normal; font-weight: 700; display: grid; place-items: center; }

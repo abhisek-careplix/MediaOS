@@ -118,9 +118,9 @@ The same key turns on the rest of the studio:
 
 | In the app | What happens | Model (fal.ai) | Rough price |
 |---|---|---|---|
-| Voices (each character and the narrator) | every spoken line is recorded once and reused by the takes and the film | ElevenLabs Multilingual v2 | $0.10 per 1,000 characters |
+| Voices (each character and the narrator) | every spoken line is performed from a delivery direction (as a director would give a voice actor), recorded once and reused by the takes and the film | ElevenLabs v3 | $0.10 per 1,000 characters |
 | Talking shots | a presenter shot is performed from its frame and its speaker's line, lips in time | OmniHuman 1.5 | $0.16 a second |
-| Each take's sound | ambience and foley made from the picture | MMAudio v2 | $0.001 a second |
+| Each take's sound | steady room tone and soft foley, from the sound the writer gives each shot | ElevenLabs Sound Effects v2 | $0.002 a second |
 | The score | an original instrumental the length of the cut | ElevenLabs Music | $0.60 a minute |
 
 Every take is also checked against the cast's portraits and the product photo (a Gemini Flash model on Vertex AI, under a cent a take), and the result shows as a dot on the take. **Make the cut** puts the chosen takes on the timeline with the voices, each shot's sound and the score, and opens it in Create. Without the key, films use the offline voice and the built-in score.
@@ -164,6 +164,31 @@ Nothing is meant to be published without three sign-offs, in order: the **creati
 - **Audit trail**: every submission, comment, sign-off, accepted item, proof change, role change and cap change, in `governance/audit.jsonl`. Each line carries the hash of the one before, so an edited or deleted line shows as **Broken**.
 
 All of it lives in `/data/governance` on the server (`governance/` locally).
+
+## Backups, restore and safe deploys
+
+**Backups.** Every data folder (films, brand kits, proof, uploads, governance) is mirrored to the private bucket `gs://careplix-labs-studio-media/studio/` every 10 minutes. Only files that changed are sent, and a quick film's render scratch (`out/`) is left out. The bucket:
+- is versioned: a changed or deleted file can be recovered for 30 days;
+- has public access blocked;
+- can be written only by the VM's service account.
+
+`gcp-up.sh` creates the bucket (through `deploy/gcp-storage.sh`) and sets `MEDIA_BUCKET` on the server. Admins see the last backup, its problems and the disk use on the **Team** page, with **Back up now**.
+
+**Safeguards.**
+- A pass that finds a folder emptied (a fresh disk before a restore) never empties the bucket.
+- A file that has gone missing from the disk is streamed from the bucket instead of failing, including video seeking.
+
+**Restore.** On a new or rebuilt server, deploy as usual, then fetch everything back:
+```bash
+gcloud --project careplix-labs compute ssh videogen --zone us-central1-a --command 'cd videogen && sudo docker compose exec videogen node app/scripts/restore.mjs'
+```
+`--dry` lists what it would fetch. `--force` also replaces files whose size differs from the stored copy. An older version of a single file: `gcloud storage ls --all-versions gs://careplix-labs-studio-media/studio/<path>`, then `gcloud storage cp` the one you want.
+
+**Safe deploys.** A deploy builds the new image first, then stops the old server, which lets running renders and shoots finish (up to `DRAIN_MINUTES`, 15). Meanwhile:
+- pages, comments and sign-offs keep working;
+- new work is refused with "The studio is updating".
+
+Then it makes a last backup and the new server starts. Docker allows 20 minutes for this.
 
 ## Tested
 

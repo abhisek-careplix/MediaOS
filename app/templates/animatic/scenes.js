@@ -11,6 +11,7 @@ let FD = 'Inter', FB = 'Inter', ACCENT = '#0a84ff';
 const F = (w, s, face = FB) => `${w} ${s}px ${face}`;
 const MONO = s => `500 ${s}px "JetBrains Mono"`;
 const ease = t => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+const DISSOLVE = 0.4;   // seconds a graphics card takes to dissolve in from the filmed shot before it
 
 // the move a board asks for, as zoom and offset (fractions of the frame) from the shot's progress q
 function camera(move, q, t) {
@@ -113,6 +114,16 @@ async function draw(t) {
   }
   caption(t);
   if (LOGO && s.engine === 'code' && s.i === tl.scenes.length - 1) drawLogo(ctx, LOGO, W / 2, H * 0.12, 70 * S, 360 * S, 'center', seg(lt, 0.2, 0.6));
+  // in a cut, a graphics card after a filmed shot dissolves in from that shot's last frame rather than hard-cutting
+  const prev = CUT && s.engine === 'code' && s.i > 0 && BOARDS[s.i - 1]?.video ? BOARDS[s.i - 1] : null;
+  if (prev && lt < DISSOLVE) {
+    await seek(prev.video, Math.min(tl.scenes[s.i - 1].dur, prev.dur - 1 / 48));
+    const k = Math.max(W / prev.vw, H / prev.vh);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1 - ease(lt / DISSOLVE);
+    ctx.drawImage(prev.video, (W - prev.vw * k) / 2, (H - prev.vh * k) / 2, prev.vw * k, prev.vh * k);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // the spoken line, at the foot of the frame

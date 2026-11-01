@@ -236,7 +236,8 @@ def beds():
         a = fades(a[:int((e['dur'] + .08) * SR)].copy(), .03, .12)
         s = int(e['t'] * SR)
         n = min(len(a), N - s)
-        if n > 0: fol[s:s + n] += a[:n] * (.03 / rms(a))
+        # quiet and even: to room-tone level, but no single sound in it louder than a soft touch
+        if n > 0: fol[s:s + n] += a[:n] * min(.03 / rms(a), .2 / (np.abs(a).max() + 1e-9))
 
 
 if not composed():

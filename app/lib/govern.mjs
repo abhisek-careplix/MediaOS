@@ -5,8 +5,9 @@ import { ROLES, rolesOf, can, listTeam, setPerson, removePerson, adminConfigured
 import { listReviews, viewReview, candidates, submit, decide, override, comment, resolveComment, withdraw, recheck, mediaPath, STEPS } from './reviews.mjs';
 import { spendOf, readCaps, writeCaps, overCap, monthOf, KINDS } from './ledger.mjs';
 import { readAudit, verifyAudit } from './audit.mjs';
+import { storageOn, storageStatus, syncNow } from './storage.mjs';
 
-export const GOVERNED = new Set(['team', 'reviews', 'spend', 'audit']);
+export const GOVERNED = new Set(['team', 'reviews', 'spend', 'audit', 'storage']);
 const NO_ROLE = 'Your role doesn’t include this. Ask an admin to add the Creator role on the Team page.';
 
 // writes that start paid work, refused once a monthly cap is reached
@@ -68,6 +69,17 @@ async function routes(req, res, parts, url, user, { send, body, serveFile }) {
     if (M === 'PUT' && parts[1] === 'caps') {
       if (!can(user, 'budget') && !can(user, 'admin')) return send(res, 403, { error: 'Only a budget owner or an admin can set caps.' });
       return send(res, 200, writeCaps(await body(req)));
+    }
+  }
+
+  // the Cloud Storage backup: how far it got, and a pass now
+  if (parts[0] === 'storage') {
+    need('admin');
+    if (M === 'GET') return send(res, 200, storageStatus());
+    if (M === 'POST' && parts[1] === 'sync') {
+      if (!storageOn()) return send(res, 400, { error: 'Cloud Storage isn’t set up on this server.' });
+      await syncNow();
+      return send(res, 200, storageStatus());
     }
   }
 

@@ -10,6 +10,8 @@ services:
     expose:
       - "5178"
     restart: unless-stopped
+    # a deploy lets running renders and shoots finish (up to DRAIN_MINUTES, 15) before the old container stops
+    stop_grace_period: 20m
     shm_size: "1gb"   # headless Chromium needs more than Docker's 64 MB default
 
   caddy:

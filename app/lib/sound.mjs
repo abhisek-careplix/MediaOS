@@ -1,15 +1,14 @@
-// Sound for a cut (lib/fal.mjs, FAL_KEY): a composed score the length of the film, and each filmed shot's own ambience
-// and foley, made from the picture so the sound matches what is on screen. Both are WAVs the mix lays under the voice
-// (app/audio/mix.py). Settings (environment): MUSIC_MODEL, FOLEY_MODEL.
+// Sound for a cut (lib/fal.mjs, FAL_KEY): a composed score the length of the film, and each filmed shot's own bed (its
+// room tone and soft foley, from the ambience the writer gave the shot). Both are WAVs the mix lays under the voice
+// (app/audio/mix.py). Settings (environment): MUSIC_MODEL, AMBIENCE_MODEL.
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
-import { falReady, upload, run, fetchFile } from './fal.mjs';
+import { falReady, run, fetchFile } from './fal.mjs';
 import { billed } from './ledger.mjs';
 
 const MUSIC_MODEL = process.env.MUSIC_MODEL || 'fal-ai/elevenlabs/music';
-const FOLEY_MODEL = process.env.FOLEY_MODEL || 'fal-ai/mmaudio-v2';
 export const soundReady = () => falReady();
 const ff = args => new Promise((res, rej) => execFile('ffmpeg', ['-v', 'error', '-y', ...args], { timeout: 180000 }, e => (e ? rej(e) : res())));
 const hash = (...xs) => crypto.createHash('sha1').update(xs.join('|')).digest('hex').slice(0, 14);
@@ -28,20 +27,19 @@ export async function composeScore(dir, { mood, bpm, what, seconds }) {
   return billed('voice', { file: name, cost: len / 60 * 0.6, cached: false }, { engine: 'Score' });
 }
 
-// a shot's ambience and foley from its take: (dir, take, { place, action }) → { file (relative to dir), cost }
-export async function foleyFor(dir, take, { place = '', action = '' }) {
+// each shot's bed: steady room tone for its place, with any foley kept soft and occasional. Made from words: a model
+// that listens to the picture hears a window and adds wind, and voices a speaking face.
+const AMBIENCE_MODEL = process.env.AMBIENCE_MODEL || 'fal-ai/elevenlabs/sound-effects/v2';
+export async function ambienceFor(dir, take, { ambience = '' }) {
   const name = `sound/${take.id}.wav`, file = path.join(dir, name);
   if (fs.existsSync(file)) return { file: name, cost: 0, cached: true };
-  const url = await upload({ data: fs.readFileSync(path.join(dir, take.file)), mime: 'video/mp4', name: 'take.mp4' });
-  const seconds = Math.min(30, Math.max(1, take.seconds || 5));
-  const out = await run(FOLEY_MODEL, {
-    video_url: url, duration: seconds, num_steps: 25, cfg_strength: 4.5,
-    prompt: `Natural, realistic ambience and foley for this scene${place ? `: ${place}` : ''}. ${action}`.slice(0, 900),
-    negative_prompt: 'music, melody, singing, speech, talking, voices, narration, distortion, noise bursts',
-  }, { minutes: 5 });
-  const mp4 = await fetchFile(out.video?.url);
+  const [place, ...rest] = String(ambience || 'a quiet modern office').split(',').map(x => x.trim()).filter(Boolean);
+  const seconds = Math.min(22, Math.max(1, Math.ceil(take.seconds || 4)));
+  const text = `Steady, quiet background room tone of ${place}${rest.length ? `, with very soft, occasional ${rest.join(' and ')}` : ''}. Subtle and continuous. No voices, no music, no wind.`;
+  const out = await run(AMBIENCE_MODEL, { text: text.slice(0, 450), duration_seconds: seconds, prompt_influence: 0.6 }, { minutes: 3 });
+  const mp3 = await fetchFile(out.audio?.url);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file + '.mp4', mp4);
-  await ff(['-i', file + '.mp4', '-vn', '-ar', '48000', '-ac', '2', file]).finally(() => fs.rmSync(file + '.mp4', { force: true }));
-  return billed('voice', { file: name, cost: seconds * 0.001, cached: false }, { engine: 'Sound' });
+  fs.writeFileSync(file + '.mp3', mp3);
+  await ff(['-i', file + '.mp3', '-ar', '48000', '-ac', '2', file]).finally(() => fs.rmSync(file + '.mp3', { force: true }));
+  return billed('voice', { file: name, cost: seconds * 0.002, cached: false }, { engine: 'Sound' });
 }

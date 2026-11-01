@@ -259,7 +259,9 @@ function takeStrip(s, running) {
   return h('div', { class: 'takes' },
     ...(s.takes || []).map((t, k) => {
       const c = t.check, low = c && Math.min(c.people || 5, c.product || 5, c.picture || 5);
-      return h('button', { class: 'take' + (t.id === s.take ? ' on' : ''), title: `Take ${k + 1}${t.id === s.take ? ' (in the cut)' : ''}${t.engine === 'talking' ? ' · talking' : ''}${c ? ` · ${c.note}` : ''}`, 'aria-pressed': t.id === s.take, onclick: () => pick(t) },
+      // a talking take of an earlier reading of the line no longer matches its voice
+      const stale = t.engine === 'talking' && (!t.line || t.line !== s.line?.file);
+      return h('button', { class: 'take' + (t.id === s.take ? ' on' : '') + (stale ? ' stale' : ''), title: `Take ${k + 1}${t.id === s.take ? ' (in the cut)' : ''}${t.engine === 'talking' ? ' · talking' : ''}${stale ? ' · performs an earlier reading of the line' : c ? ` · ${c.note}` : ''}`, 'aria-pressed': t.id === s.take, onclick: () => pick(t) },
         h('img', { src: `/films/${P.id}/${t.poster}`, alt: `Take ${k + 1}` }),
         c ? h('i', { class: 'take-check ' + (low >= 4 ? 'good' : low >= 3 ? 'fair' : 'poor'), 'aria-label': c.note }, icon(low >= 4 ? 'check' : 'info', 10)) : null);
     }),
@@ -322,7 +324,9 @@ function inspect(i) {
           field('Action', h('textarea', { rows: 3, oninput: e => edit('action', e.target.value) }, s.action)),
           h('div', { class: 'row2' }, field('Spoken line', h('textarea', { rows: 2, oninput: e => edit('vo', e.target.value) }, s.vo)),
             field('Said by', sel([['narrator', 'Narrator (voice-over)'], ...p.cast.map(c => [c.id, c.name])], s.speaker || 'narrator', v => edit('speaker', v)))),
-          field('On-screen text', h('input', { value: s.super, oninput: e => edit('super', e.target.value) })))),
+          field('Delivery', h('input', { value: s.delivery || '', placeholder: 'How it’s said, e.g. warm and conversational, like sharing a tip', oninput: e => edit('delivery', e.target.value) })),
+          field('On-screen text', h('input', { value: s.super, oninput: e => edit('super', e.target.value) })),
+          field('Sound', h('input', { value: s.ambience || '', placeholder: 'What we hear, e.g. quiet office, distant keyboard taps', oninput: e => edit('ambience', e.target.value) })))),
       h('div', { class: 'actions' }, note, redraw),
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost', disabled: i === 0, onclick: () => { p.shots.splice(i - 1, 0, p.shots.splice(i, 1)[0]); close(); save(true).then(render); } }, icon('chevronL', 14), 'Earlier'),
@@ -345,6 +349,9 @@ async function save(now = false) {
 }
 // a new frame style: save it, then redraw every frame in it
 async function restyle(style) {
+  const filmed = P.production.shots.some(s => s.takes?.length), running = P.job?.status === 'running';
+  if (running) { toast('Wait until the current work finishes before changing the frame style.', 'error'); return render(); }
+  if (!confirm(`Redraw every frame${filmed ? ' (your filmed takes stay)' : ''} and each character's portrait in the ${META.styles.find(s => s.id === style)?.name || style} style? About $${(0.07 * (P.production.shots.length + 2 * P.production.cast.length)).toFixed(2)}.`)) return render();
   P.production.style = style;
   try { await api('productions/' + P.id, { method: 'PUT', body: { style } }); } catch (e) { toast(e.message, 'error'); return render(); }
   redrawAll();

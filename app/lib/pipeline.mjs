@@ -52,7 +52,7 @@ export async function renderQuick(job, meta) {
     // A scene's own voice (a character's line in a cut from a production) wins over the film's narrator.
     delete content.voice;
     const known = v => isStudioVoice(v) || VOICES.some(x => x[0] === v);
-    const lines = content.scenes.map((s, i) => ({ id: 's' + i, text: (s.narration || '').trim(), voice: [s.voice, meta.voice].find(known) || 'af_heart', speed: 1.0 })).filter(l => l.text);
+    const lines = content.scenes.map((s, i) => ({ id: 's' + i, text: (s.narration || '').trim(), voice: [s.voice, meta.voice].find(known) || 'af_heart', delivery: s.delivery || '', speed: 1.0 })).filter(l => l.text);
     if (meta.narration !== false && lines.length) {
       emit(job, { step: 'Recording narration', pct: 3 });
       const vdir = path.join(dir, 'voice'), durs = {};
@@ -65,12 +65,12 @@ export async function renderQuick(job, meta) {
         if (!isStudioVoice(l.voice)) { offline.push(l); continue; }
         try {
           if (!studioReady()) throw new Error('the studio voices aren’t set up');
-          const r = await speak({ text: l.text, voice: l.voice, cacheDir: path.join(dir, 'voicecache') });
+          const r = await speak({ text: l.text, voice: l.voice, delivery: l.delivery, cacheDir: path.join(dir, 'voicecache') });
           fs.copyFileSync(r.file, path.join(vdir, l.id + '.wav'));
           durs[l.id] = r.dur;
         } catch (e) {
           emit(job, {}, `Studio voice unavailable for ${l.id} (${e.message}); using the offline voice`);
-          offline.push({ ...l, voice: STUDIO_VOICES[l.voice].k });
+          offline.push({ id: l.id, text: l.text, voice: STUDIO_VOICES[l.voice].k, speed: l.speed });
         }
       }
       if (offline.length) {
