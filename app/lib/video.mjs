@@ -3,6 +3,10 @@
 // names only. Kling also takes the cast as "elements" (each character's reference portraits), which keeps faces the same
 // from shot to shot. Settings (environment): VERTEX_VIDEO_LOCATION (us-central1), VEO_FAST_MODEL, VEO_MODEL,
 // FAL_KLING_MODEL, FAL_KLING_IMAGE_FIELD (the endpoint's starting-image field, start_image_url).
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { execFile } from 'child_process';
 import { vertexToken, vertexProject, vertexStatus } from './vertex.mjs';
 import { falReady, upload, run, fetchFile } from './fal.mjs';
 import { billed } from './ledger.mjs';
@@ -38,26 +42,47 @@ export async function shootClip({ engine, image, prompt, seconds, aspect = '16:9
 }
 
 // —— talking shots: a person in a frame speaks a recorded line, lips, face and body in time with it ——
-// The first model usually takes 2-4 minutes; when it stalls or fails, the second takes over (an unpaid account or a
-// safety block isn't retried).
+// In order of preference (a blind comparison of these and six others on the same shot put the first narrowly ahead);
+// each usually takes 2-4 minutes, and when one stalls or fails the next takes over (an unpaid account or a safety block
+// isn't retried). A model with a minimum audio length gets the line with silence after it, and its clip is trimmed back.
 const TALKERS = [
-  { model: process.env.TALK_MODEL || 'fal-ai/bytedance/omnihuman/v1.5', rate: 0.16, minutes: 10, input: { resolution: '720p' } },
+  { model: process.env.TALK_MODEL || 'bytedance/omnihuman/v2', rate: 0.105, minutes: 10, input: {}, minAudio: 4 },
+  { model: 'fal-ai/bytedance/omnihuman/v1.5', rate: 0.16, minutes: 10, input: { resolution: '720p' } },
   { model: process.env.TALK_FALLBACK_MODEL || 'fal-ai/kling-video/ai-avatar/v2/pro', rate: 0.115, minutes: 15, input: {} },
 ];
 export const talkingReady = () => falReady();
-// { image: { data, mime }, audio: { data, mime }, prompt } → { mp4 (with the line as its sound), seconds, cost }
+const sh = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, { timeout: 180000 }, (e, out) => (e ? rej(e) : res(String(out).trim()))));
+// { image: { data, mime }, audio: { data (a WAV), mime }, prompt } → { mp4 (with the line as its sound), seconds, cost }
 export async function performClip({ image, audio, prompt }) {
-  const [image_url, audio_url] = await Promise.all([upload({ ...image, name: 'frame.png' }), upload({ ...audio, name: 'line.wav' })]);
-  for (const [k, t] of TALKERS.entries()) {
-    try {
-      const out = await run(t.model, { image_url, audio_url, prompt, ...t.input }, { minutes: t.minutes });
-      const seconds = +out.duration || 0;
-      return billed('video', { mp4: await fetchFile(out.video?.url), seconds, cost: seconds * t.rate }, { engine: 'Talking' });
-    } catch (e) {
-      if (k === TALKERS.length - 1 || e.code === 402 || /safety/i.test(e.message)) throw e;
-      console.error('talking shot: trying the second model;', e.detail || e.message);
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'talk-'));
+  try {
+    const line = path.join(tmp, 'line.wav');
+    fs.writeFileSync(line, audio.data);
+    const dur = +(await sh('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', line]));
+    const image_url = await upload({ ...image, name: 'frame.png' }), urls = {};
+    // the line as each model needs it: as recorded, or with silence after it up to the model's minimum
+    const audioFor = async min => {
+      const key = min && dur < min ? min : 0;
+      if (urls[key]) return urls[key];
+      let file = line;
+      if (key) { file = path.join(tmp, `line-${key}.wav`); await sh('ffmpeg', ['-v', 'error', '-y', '-i', line, '-af', `apad=whole_dur=${key + 0.1}`, file]); }
+      return (urls[key] = await upload({ data: fs.readFileSync(file), mime: 'audio/wav', name: 'line.wav' }));
+    };
+    for (const [k, t] of TALKERS.entries()) {
+      try {
+        const out = await run(t.model, { image_url, audio_url: await audioFor(t.minAudio), prompt, ...t.input }, { minutes: t.minutes });
+        const made = +out.duration || dur, raw = path.join(tmp, 'take.mp4'), cut = path.join(tmp, 'cut.mp4');
+        fs.writeFileSync(raw, await fetchFile(out.video?.url));
+        // back to the line's own length when it was padded
+        const padded = t.minAudio && dur < t.minAudio;
+        if (padded) await sh('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-t', dur.toFixed(3), '-c:v', 'libx264', '-crf', '16', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', cut]);
+        return billed('video', { mp4: fs.readFileSync(padded ? cut : raw), seconds: padded ? dur : made, cost: made * t.rate }, { engine: 'Talking' });
+      } catch (e) {
+        if (k === TALKERS.length - 1 || e.code === 402 || /safety/i.test(e.message)) throw e;
+        console.error(`talking shot: ${t.model} failed, trying the next model;`, e.detail || e.message);
+      }
     }
-  }
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 
 // —— Veo: a long-running prediction, polled until the video is ready (about a minute) ——

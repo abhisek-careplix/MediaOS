@@ -119,7 +119,7 @@ The same key turns on the rest of the studio:
 | In the app | What happens | Model (fal.ai) | Rough price |
 |---|---|---|---|
 | Voices (each character and the narrator) | every spoken line is performed from a delivery direction (as a director would give a voice actor), recorded once and reused by the takes and the film | ElevenLabs v3 | $0.10 per 1,000 characters |
-| Talking shots | a presenter shot is performed from its frame and its speaker's line, lips in time | OmniHuman 1.5 | $0.16 a second |
+| Talking shots | a presenter shot is performed from its frame and its speaker's line, lips in time; the speaker faces the camera for the whole line | OmniHuman v2 (falls back to OmniHuman 1.5, then Kling AI Avatar v2 Pro) | $0.105 a second (lines under 4 s are billed as 4 s) |
 | Each take's sound | steady room tone and soft foley, from the sound the writer gives each shot | ElevenLabs Sound Effects v2 | $0.002 a second |
 | The score | an original instrumental the length of the cut | ElevenLabs Music | $0.60 a minute |
 
