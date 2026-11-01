@@ -3,6 +3,7 @@ films/
 brands/
 proof/
 uploads/
+governance/
 
 # secrets
 .env

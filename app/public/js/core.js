@@ -78,7 +78,12 @@ const P = {
   shield: 'M12 3l7 3v5.5c0 4.6-3 7.9-7 9.5-4-1.6-7-4.9-7-9.5V6zM9 12l2.2 2.2L15.5 10',
   slides: 'M3 4h18v12H3zM12 16v4M8 20h8M7 8h6M7 11h10',
   palette: 'M12 3a9 9 0 100 18c1.2 0 1.8-.8 1.8-1.7 0-.6-.3-1-.6-1.4-.3-.4-.5-.8-.5-1.3 0-1 .8-1.6 1.8-1.6H17a4 4 0 004-4c0-4.4-4-8-9-8zM7.5 12.5v.01M9 8.5v.01M13.5 7.5v.01M17 10v.01',
+  seal: 'M12 3l2.4 1.8 3-.2.9 2.8 2.4 1.8-.9 2.8.9 2.8-2.4 1.8-.9 2.8-3-.2L12 21l-2.4-1.8-3 .2-.9-2.8-2.4-1.8.9-2.8-.9-2.8 2.4-1.8.9-2.8 3 .2zM8.5 12l2.4 2.4 4.6-4.8',
+  users: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.2a3.5 3.5 0 010 6.6M18 14.3c2.1.7 3.5 2.8 3.5 5.7',
+  coins: 'M12 3a9 9 0 110 18 9 9 0 010-18zM14.8 9.2c-.5-.8-1.5-1.2-2.8-1.2-1.7 0-2.8.8-2.8 2 0 2.8 5.8 1.4 5.8 4.2 0 1.2-1.2 2-2.9 2-1.4 0-2.5-.5-3-1.4M12 6.5V8M12 16.2v1.4',
 };
+// the signed-in person's roles (lib/team.mjs): creator, lead, reviewer, budget, admin
+export const hasRole = role => !!app.me?.roles?.includes(role);
 export function icon(name, size = 18, cls = '') {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   s.setAttribute('viewBox', '0 0 24 24');

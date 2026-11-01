@@ -5,7 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const KEYS = new Set(['FAL_KEY', 'FAL_KLING_MODEL', 'FAL_KLING_IMAGE_FIELD', 'VEO_MODEL', 'VEO_FAST_MODEL', 'VERTEX_PROJECT', 'VERTEX_LOCATION', 'VERTEX_VIDEO_LOCATION', 'VERTEX_IMAGE_MODEL']);
+const KEYS = new Set(['FAL_KEY', 'FAL_KLING_MODEL', 'FAL_KLING_IMAGE_FIELD', 'VEO_MODEL', 'VEO_FAST_MODEL', 'VOICE_MODEL', 'TALK_MODEL', 'MUSIC_MODEL', 'FOLEY_MODEL',
+  'VERTEX_PROJECT', 'VERTEX_LOCATION', 'VERTEX_VIDEO_LOCATION', 'VERTEX_IMAGE_MODEL', 'VERTEX_LOOK_MODEL']);
 const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env.local');
 try {
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {

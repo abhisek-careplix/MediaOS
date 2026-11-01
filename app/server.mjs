@@ -10,14 +10,22 @@ import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
 import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog } from './lib/jobs.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
+import { studioVoiceList, isStudioVoice, STUDIO_VOICES, studioReady, speak } from './lib/voice.mjs';
 import { writeScript, runDirector, writeBrand } from './lib/claude.mjs';
 import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, logout } from './lib/auth.mjs';
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
-import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto } from './lib/productions.mjs';
-import { engines, ENGINES } from './lib/video.mjs';
+import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf } from './lib/productions.mjs';
+import { talkingReady } from './lib/video.mjs';
+import { soundReady } from './lib/sound.mjs';
+import { engines, ENGINES, lengthFor } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
+import { governApi, writeGate, GOVERNED } from './lib/govern.mjs';
+import { runAs, tag } from './lib/context.mjs';
+import { rolesOf, can } from './lib/team.mjs';
+import { overCap } from './lib/ledger.mjs';
+import { audit } from './lib/audit.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
 const PORT = +process.env.PORT || 5178;
@@ -68,7 +76,7 @@ function uploaded(list) {
 }
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ttf': 'font/ttf', '.woff2': 'font/woff2',
-  '.mp4': 'video/mp4', '.wav': 'audio/wav', '.srt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
+  '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.wav': 'audio/wav', '.srt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
 fs.mkdirSync(FILMS, { recursive: true });
 
@@ -133,6 +141,9 @@ function saveContent(dir, script, template, brand, media) {
   if (b) content.brand = b;
   const m = media === undefined ? prev?.media : media;
   if (m?.length) content.media = m;
+  // a cut's composed score is the server's too: kept from the saved film unless the script brings one
+  const sc = script.score === undefined ? prev?.score : script.score;
+  if (typeof sc === 'string' && /^score\/[\w-]+\.wav$/.test(sc)) content.score = sc;
   fs.writeFileSync(path.join(dir, 'content.json'), JSON.stringify(content, null, 1));
   const meta = readMeta(dir);
   writeMeta(dir, { ...meta, title: content.title });
@@ -166,18 +177,21 @@ async function api(req, res, url, user) {
   if (M === 'GET' && parts[0] === 'config') {
     return send(res, 200, {
       templates: Object.values(TEMPLATES).filter(t => !t.hidden).map(({ id, name, blurb, accents }) => ({ id, name, blurb, accents })),
-      voices: VOICES, styles: libraryStyles(), claude: claudeStatus(), lib: LIB, films: FILMS,
+      voices: [...studioVoiceList(), ...VOICES], styles: libraryStyles(), claude: claudeStatus(), lib: LIB, films: FILMS,
       libReady: fs.existsSync(path.join(LIB, 'core/render/video.mjs')), voiceReady: fs.existsSync(path.join(LIB, 'core/tts/kokoro-v1.0.onnx')),
     });
   }
-  if (M === 'GET' && parts[0] === 'me') return send(res, 200, { ...user, auth: authOn(), open: OPEN, domains: AUTH.domains, canDirect: canDirect(user) });
+  if (M === 'GET' && parts[0] === 'me') return send(res, 200, { ...user, auth: authOn(), open: OPEN, domains: AUTH.domains, canDirect: canDirect(user), roles: rolesOf(user) });
+  // team, reviews and sign-offs, spend and caps, the audit trail
+  if (GOVERNED.has(parts[0])) return governApi(req, res, parts, url, user, { send, body, serveFile });
   if (M === 'GET' && parts[0] === 'films' && !parts[1]) return send(res, 200, listFilms());
 
   // —— pre-production: brief → concepts → storyboard → animatic ——
   if (parts[0] === 'productions') {
     if (M === 'GET' && parts[1] === 'meta') {
       const v = await vertexStatus();
-      return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok }, engines: await engines() });
+      return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok }, engines: await engines(),
+        voices: studioReady() ? Object.entries(STUDIO_VOICES).map(([id, x]) => ({ id, name: x.name, tag: x.tag, who: x.who })) : [], talking: talkingReady(), sound: soundReady() });
     }
     if (M === 'POST' && !parts[1]) {
       const b = await body(req);
@@ -206,6 +220,7 @@ async function api(req, res, url, user) {
     }
     const id = parts[1], dir = filmDir(id), p = readProduction(dir);
     if (!p) return send(res, 404, { error: 'no such production' });
+    tag({ asset: id, brandId: p.brandId || null });   // whatever this request pays for is charged to this production
     const state = () => ({ meta: readMeta(dir), production: readProduction(dir), review: review(readProduction(dir)), job: getJob(id)?.status === 'running' ? { status: 'running', step: getJob(id).step, pct: getJob(id).pct } : null });
     // the storyboard is drawn in the background; the editor follows /api/films/<id>/events and refetches
     const drawAll = ids => {
@@ -232,9 +247,11 @@ async function api(req, res, url, user) {
         if (STYLES[b.style].vertex && !(await vertexStatus()).ok) return send(res, 400, { error: 'Generated frames aren’t available on this server right now.' });
         p.style = b.style;
       }
+      if (b.narrator !== undefined) p.narrator = isStudioVoice(b.narrator) ? b.narrator : null;
       if (Array.isArray(b.cast)) {
         const refs = new Map(p.cast.map(c => [c.id, c]));
-        p.cast = b.cast.slice(0, 6).map(c => ({ id: text(c.id, 12), name: text(c.name, 60), look: text(c.look), wardrobe: text(c.wardrobe, 300), voice: text(c.voice, 200), ref: refs.get(c.id)?.ref || null, refKey: refs.get(c.id)?.refKey || null }));
+        p.cast = b.cast.slice(0, 6).map(c => ({ id: text(c.id, 12), name: text(c.name, 60), look: text(c.look), wardrobe: text(c.wardrobe, 300), voice: text(c.voice, 200), voiceId: isStudioVoice(c.voiceId) ? c.voiceId : null,
+          ref: refs.get(c.id)?.ref || null, sheet: refs.get(c.id)?.sheet || null, refKey: refs.get(c.id)?.refKey || null }));
       }
       if (Array.isArray(b.locations)) p.locations = b.locations.slice(0, 6).map(l => ({ id: text(l.id, 12), name: text(l.name, 60), look: text(l.look) }));
       if (Array.isArray(b.shots)) {
@@ -243,6 +260,7 @@ async function api(req, res, url, user) {
           const old = keep.get(s.id);
           return { id: old ? old.id : 's' + Math.random().toString(36).slice(2, 8), size: text(s.size, 40), angle: text(s.angle, 80), move: text(s.move, 40), dur: Math.max(0.5, Math.min(12, +s.dur || 2.5)),
             engine: ['video', 'presenter', 'code', 'product'].includes(s.engine) ? s.engine : 'video', action: text(s.action, 900), vo: text(s.vo), super: text(s.super, 200),
+            speaker: p.cast.some(c => c.id === s.speaker) ? s.speaker : 'narrator', line: old?.line || null,
             cast: Array.isArray(s.cast) ? s.cast.map(c => text(c, 12)).slice(0, 6) : [], location: text(s.location, 12),
             product: Number.isInteger(s.product) && s.product >= 0 && s.product < photos ? s.product : -1, proof: Array.isArray(s.proof) ? s.proof.map(x => text(x, 40)).slice(0, 6) : [],
             board: old?.board || null, box: old?.box || null, fallback: old?.fallback || null,
@@ -250,7 +268,10 @@ async function api(req, res, url, user) {
         });
         for (const [sid, s] of keep) if (!p.shots.some(x => x.id === sid)) {
           if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
-          for (const t of s.takes || []) for (const f of [t.file, t.poster]) if (/^takes\/[\w-]+\.(mp4|jpg)$/.test(f || '')) fs.rmSync(path.join(dir, f), { force: true });
+          for (const t of s.takes || []) {
+            for (const f of [t.file, t.poster]) if (/^takes\/[\w-]+\.(mp4|jpg)$/.test(f || '')) fs.rmSync(path.join(dir, f), { force: true });
+            if (/^sound\/[\w-]+\.wav$/.test(t.sound || '')) fs.rmSync(path.join(dir, t.sound), { force: true });
+          }
         }
       }
       saveProduction(dir, p);
@@ -269,7 +290,7 @@ async function api(req, res, url, user) {
       if (limited(res, req, 'script', true)) return;
       for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
       for (const c of p.cast) if (c.ref && /^cast\/[\w-]+\.png$/.test(c.ref)) fs.rmSync(path.join(dir, c.ref), { force: true });
-      fs.rmSync(path.join(dir, 'takes'), { recursive: true, force: true });
+      for (const sub of ['takes', 'sound']) fs.rmSync(path.join(dir, sub), { recursive: true, force: true });
       p.concept = b.concept;
       const { p: next } = await writeShots(dir, p, { model: p.model });
       saveProduction(dir, next);
@@ -302,10 +323,12 @@ async function api(req, res, url, user) {
       if (!ids.length) return send(res, 400, { error: 'No shot can be filmed yet: shots need an Illustrated or Cinematic frame (graphics stay as cards).' });
       if (limited(res, req, 'render')) return;
       if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Something is already running for this production.' });
+      const over = overCap(user, p.brandId, Math.max(1, Math.min(3, +b.takes || 1)) * ids.reduce((a, x) => a + lengthFor(engine, p.shots.find(s => s.id === x).dur) * ENGINES[engine].rate, 0));
+      if (over) return send(res, 402, { error: over });
       const takes = Math.max(1, Math.min(3, +b.takes || 1)), total = ids.length * takes, job = startJob(id, dir, 'shoot');
       let done = 0;
       emit(job, { step: `Shooting ${total} take${total > 1 ? 's' : ''}`, pct: 2 });
-      shootShots(dir, ids, { engine, takes, onTake: (sid, err) => emit(job, { pct: Math.round(100 * ++done / total), step: `Shot ${done} of ${total}` }, err ? `take for ${sid} failed: ${err.message}` : `take ${sid}`) })
+      shootShots(dir, ids, { engine, takes, onStep: step => emit(job, { step }), onTake: (sid, err) => emit(job, { pct: Math.round(100 * ++done / total), step: `Shot ${done} of ${total}` }, err ? `take for ${sid} failed: ${err.message}` : `take ${sid}`) })
         .then(() => emit(job, { status: 'done', step: 'Takes ready', pct: 100 }))
         .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
       return send(res, 200, state());
@@ -313,18 +336,40 @@ async function api(req, res, url, user) {
     // the rough cut: the chosen takes (and the frames of shots not filmed) as a film to review and export in Create
     if (M === 'POST' && parts[2] === 'cut') {
       if (!p.shots.some(s => s.take)) return send(res, 400, { error: 'Shoot at least one shot first.' });
+      if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Something is already running for this production.' });
       const b = await body(req), brand = p.brandId ? readBrand(p.brandId) : null;
-      const film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Rough cut: ${p.title || p.brief.slice(0, 60)}`, voice: b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
+      // the voices, each take's sound and the score, made (or found) in the production, then copied with the takes
+      const { score } = await soundForCut(dir).catch(e => { console.error('cut sound:', e.detail || e.message); return { score: null }; });
+      const q = readProduction(dir);
+      const narrator = isStudioVoice(q.narrator) && studioReady() ? q.narrator : null;
+      const film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Cut: ${p.title || p.brief.slice(0, 60)}`, voice: narrator || b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
+      const carry = rel => {
+        if (!rel || !/^(voicecache|sound|score)\/[\w-]+\.wav$/.test(rel) || !fs.existsSync(path.join(dir, rel))) return;
+        fs.mkdirSync(path.join(film.dir, path.dirname(rel)), { recursive: true });
+        fs.copyFileSync(path.join(dir, rel), path.join(film.dir, rel));
+      };
+      for (const s of q.shots) { carry(s.line?.file); carry(s.takes?.find(t => t.id === s.take)?.sound); }
+      carry(score);
       for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
         fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
         fs.copyFileSync(path.join(dir, s.board), path.join(film.dir, s.board));
       }
       if (p.media?.length) fs.cpSync(path.join(dir, 'media'), path.join(film.dir, 'media'), { recursive: true });
-      const clips = await clipsInto(dir, p, film.dir);
-      saveContent(film.dir, animaticScript(p, clips), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
+      const clips = await clipsInto(dir, q, film.dir);
+      saveContent(film.dir, animaticScript(q, clips, { score }), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
       writeMeta(film.dir, { ...readMeta(film.dir), production: id });
       writeMeta(dir, { ...readMeta(dir), cut: film.id });
       return send(res, 200, { id: film.id });
+    }
+    // hear a studio voice: a character's first line (or a short hello), recorded once and kept
+    if (M === 'POST' && parts[2] === 'voice-sample') {
+      const b = await body(req);
+      if (!isStudioVoice(b.voice) || !studioReady()) return send(res, 400, { error: 'Studio voices aren’t available on this server.' });
+      const who = p.cast.find(c => c.id === b.cast), line = who && p.shots.find(s => s.speaker === who.id && s.vo?.trim())?.vo;
+      const firstVo = !who && p.shots.find(s => s.speaker === 'narrator' && s.vo?.trim())?.vo;
+      const r = await speak({ text: line || firstVo || `Hi, I'm ${STUDIO_VOICES[b.voice].name}. This is how I sound in your film.`, voice: b.voice, cacheDir: path.join(dir, 'voicecache') });
+      if (!r.cached) { const fresh = readProduction(dir); fresh.cost = (fresh.cost || 0) + r.cost; saveProduction(dir, fresh); }
+      return send(res, 200, { url: `/films/${id}/voicecache/${path.basename(r.file)}` });
     }
     if (M === 'POST' && parts[2] === 'animatic') {
       if (!p.shots.length) return send(res, 400, { error: 'Board a concept first.' });
@@ -476,10 +521,17 @@ async function api(req, res, url, user) {
       if (!q) return send(res, 400, { error: 'Search for something.' });
       return send(res, 200, await searchPubMed(q));
     }
-    if (M === 'POST' && parts[1] === 'import') return send(res, 200, importCSV((await body(req)).csv, who));
-    if (M === 'POST' && !parts[1]) return send(res, 200, addProof(await body(req), who));
-    if (M === 'PUT' && parts[1]) return send(res, 200, updateProof(parts[1], await body(req), who));
-    if (M === 'DELETE' && parts[1]) { deleteProof(parts[1]); return send(res, 200, { ok: true }); }
+    if (M === 'POST' && parts[1] === 'import') { const added = importCSV((await body(req)).csv, who); audit('proof.imported', { target: 'proof', detail: { ids: added.map(e => e.id) } }); return send(res, 200, added); }
+    if (M === 'POST' && !parts[1]) { const e = addProof(await body(req), who); audit('proof.added', { target: e.id, detail: { claim: e.claim.slice(0, 160) } }); return send(res, 200, e); }
+    if (M === 'PUT' && parts[1]) {
+      // only medical, legal and regulatory reviewers put a claim into use
+      const b = await body(req);
+      if (b.status === 'approved' && !can(user, 'reviewer')) return send(res, 403, { error: 'Only a medical, legal and regulatory reviewer can approve proof. Save it as a draft for one to approve.' });
+      const e = updateProof(parts[1], b, who);
+      audit(b.status && b.status === e.status ? `proof.${e.status}` : 'proof.edited', { target: e.id, detail: { status: e.status, claim: e.claim.slice(0, 160) } });
+      return send(res, 200, e);
+    }
+    if (M === 'DELETE' && parts[1]) { deleteProof(parts[1]); audit('proof.deleted', { target: parts[1] }); return send(res, 200, { ok: true }); }
   }
 
   // —— brand kits ——
@@ -529,7 +581,8 @@ async function api(req, res, url, user) {
     }
     if (M === 'PUT' && parts[2] === 'settings') {
       const b = await body(req);
-      writeMeta(dir, { ...meta, voice: b.voice ?? meta.voice, narration: b.narration ?? meta.narration });
+      const voice = b.voice == null || isStudioVoice(b.voice) || VOICES.some(v => v[0] === b.voice) ? b.voice ?? meta.voice : meta.voice;
+      writeMeta(dir, { ...meta, voice, narration: b.narration ?? meta.narration });
       return send(res, 200, { ok: true });
     }
     if (M === 'POST' && parts[2] === 'render') {
@@ -616,7 +669,12 @@ const server = http.createServer(async (req, res) => {
       if (origin && origin !== AUTH.publicURL && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return send(res, 403, { error: 'Cross-site request refused' });
     }
 
-    if (p.startsWith('/api/')) return await api(req, res, url, user);
+    if (p.startsWith('/api/')) {
+      // roles and monthly caps first; then the request runs as this person, so the ledger and the audit trail know who
+      const no = writeGate(req.method, p, user);
+      if (no) return send(res, no.code, { error: no.error });
+      return await runAs(user, () => api(req, res, url, user));
+    }
     if (p.startsWith('/films/')) return serveFile(req, res, FILMS, p.slice('/films/'.length));
     if (p.startsWith('/fonts/')) return serveFile(req, res, FONTS, p.slice('/fonts/'.length));
     if (p.startsWith('/uploads/')) return serveFile(req, res, UPLOADS, p.slice('/uploads/'.length));

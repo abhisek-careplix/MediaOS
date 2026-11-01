@@ -1,5 +1,7 @@
-// Productions (pre-production for ad films and reels): a brief and product references → three concepts → a cast,
-// locations and a storyboard drawn shot by shot → an animatic, which opens in Create as a film to review and export.
+// Productions (ad films and reels): a brief and product references → three concepts → a cast (each with a look and a
+// voice), locations and a storyboard drawn shot by shot → video takes (presenter shots performed in their speaker's voice,
+// each take checked and given its own sound) → a cut with the voices, the sound and a composed score, which opens in
+// Create to review and export.
 import { $$, h, api, icon, toast, sheet, app, go, pillSelect, segmented } from './core.js';
 import { attachments, dropPhotos, uploading, attachedIds } from './attach.js';
 
@@ -21,7 +23,12 @@ let root, P = null, events = null, saveTimer = 0, META = null;
 const SHOOT = { engine: null, takes: 1 };
 const shootable = s => s.engine !== 'code' && /\.png$/.test(s.board || '');
 const lengthFor = (e, d) => e.durations.find(x => x >= d) || e.durations.at(-1);
-const estimate = (shots, e, takes) => shots.reduce((t, s) => t + lengthFor(e, +s.dur || 3) * e.rate * takes, 0);
+// where a line sits in its shot (as lib/productions.mjs LEAD and TAIL)
+const LEAD = 0.35, TAIL = 0.75, TALK_RATE = 0.16;
+const lineSecs = s => (s.line ? s.line.dur : String(s.vo || '').trim().split(/\s+/).filter(Boolean).length / 2.6);
+// presenter shots with a line are performed by a talking character when the server can (priced by the line's length)
+const performed = s => s.engine === 'presenter' && META.talking && !!String(s.vo || '').trim();
+const estimate = (shots, e, takes) => shots.reduce((t, s) => t + (performed(s) ? (LEAD + lineSecs(s) + TAIL) * TALK_RATE : lengthFor(e, Math.max(+s.dur || 3, s.vo ? LEAD + lineSecs(s) + TAIL : 0)) * e.rate) * takes, 0);
 // frame styles this server can make: Sketch always; Illustrated and Cinematic when Vertex AI is reachable
 const meta = async () => META || (META = await api('productions/meta').catch(() => ({ styles: [{ id: 'sketch', name: 'Sketch' }], vertex: { ok: false } })));
 const styles = () => META.styles.filter(s => !s.vertex || META.vertex.ok);
@@ -176,14 +183,14 @@ function board() {
       h('p', { class: 'muted' }, c?.logline || ''),
       h('p', { class: 'faint' }, `${p.shots.length} shots · ${rv.total.toFixed(1)} s · shooting estimate about $${Math.round(rv.shoot)} · spent so far $${(p.cost || 0).toFixed(2)}`)),
     h('div', { class: 'actions' },
-      styles().length > 1 ? segmented(styles().map(s => ({ v: s.id, label: s.name, title: s.vertex ? 'Generated images, about $0.04 a frame' : 'Quick pencil-style sketches, free' })), p.style || 'sketch', restyle, { label: 'Frame style' }) : null,
+      styles().length > 1 ? segmented(styles().map(s => ({ v: s.id, label: s.name, title: s.vertex ? 'Generated images, about $0.07 a frame' : 'Quick pencil-style sketches, free' })), p.style || 'sketch', restyle, { label: 'Frame style' }) : null,
       h('button', { class: 'btn ghost', onclick: () => { P.was = p.concept; p.concept = null; render(); } }, 'Change concept'),
       h('button', { class: 'btn', disabled: running, onclick: redrawAll }, icon('brush', 14), running ? (P.job.step || 'Drawing…') : 'Redraw all'),
       h('button', { class: 'btn', disabled: running || !p.shots.some(s => s.board), onclick: animatic }, icon('film', 15), P.meta.animatic ? 'New animatic' : 'Make the animatic'),
-      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.take), onclick: cut, title: 'The chosen takes, cut together with the voice-over and music' }, icon('clapper', 15), P.meta.cut ? 'New rough cut' : 'Make the rough cut')));
+      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.take), onclick: cut, title: META.sound ? 'The chosen takes, cut together with the voices, each shot’s sound and a composed score' : 'The chosen takes, cut together with the voice-over and music' }, icon('clapper', 15), P.meta.cut ? 'New cut' : 'Make the cut')));
   const grid = h('div', { class: 'board-grid' + (p.aspect === '9:16' ? ' tall' : '') }, p.shots.map((s, i) => shotCard(s, i, running, warn[s.id] || [])));
   return h('div', { class: 'prod-body' }, head, shootBar(running), castPanel(), grid,
-    P.meta.cut || P.meta.animatic ? h('p', { class: 'faint' }, ...(P.meta.cut ? ['Latest rough cut: ', h('a', { href: '#create/' + P.meta.cut }, 'open it in Create'), '. '] : []), ...(P.meta.animatic ? ['Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create'), '.'] : [])) : null);
+    P.meta.cut || P.meta.animatic ? h('p', { class: 'faint' }, ...(P.meta.cut ? ['Latest cut: ', h('a', { href: '#create/' + P.meta.cut }, 'open it in Create'), '. '] : []), ...(P.meta.animatic ? ['Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create'), '.'] : [])) : null);
 }
 // Step 4: film the frames. Graphics shots stay brand cards; sketches need a generated frame first.
 function shootBar(running) {
@@ -200,19 +207,21 @@ function shootBar(running) {
     pillSelect([[1, '1 take'], [2, '2 takes'], [3, '3 takes']], SHOOT.takes, v => { SHOOT.takes = +v; paint(); }, 'Takes per shot'),
     cost,
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn primary', disabled: running || !ready.length, onclick: () => shoot(ready.map(s => s.id)) }, icon('film', 15), running ? (P.job.step || 'Working…') : 'Shoot all'));
+    h('button', { class: 'btn primary', disabled: running || !ready.length, onclick: () => shoot(ready.map(s => s.id)) }, icon('film', 15), running ? (P.job.step || 'Working…') : 'Shoot all'),
+    META.talking && ready.some(performed) ? h('p', { class: 'faint shoot-note' }, icon('wave', 12), 'Presenter shots are performed by their character, speaking the line in their own voice.') : null);
 }
 async function shoot(ids) {
   const p = P.production, e = META.engines.find(x => x.id === SHOOT.engine), shots = p.shots.filter(s => ids.includes(s.id));
-  if (!confirm(`Shoot ${shots.length} shot${shots.length > 1 ? 's' : ''}, ${SHOOT.takes} take${SHOOT.takes > 1 ? 's' : ''} each, with ${e.name}? About $${estimate(shots, e, SHOOT.takes).toFixed(2)}, and a minute or two per take.`)) return;
+  const talking = shots.filter(performed).length;
+  if (!confirm(`Shoot ${shots.length} shot${shots.length > 1 ? 's' : ''}, ${SHOOT.takes} take${SHOOT.takes > 1 ? 's' : ''} each, with ${e.name}${talking ? ` (${talking} performed as talking shots)` : ''}? About $${estimate(shots, e, SHOOT.takes).toFixed(2)}, and a minute or two per take.`)) return;
   await save(true);
   try { const r = await api(`productions/${P.id}/shoot`, { method: 'POST', body: { ids, engine: SHOOT.engine, takes: SHOOT.takes } }); Object.assign(P, r); render(); follow(); }
   catch (err) { toast(err.message, 'error'); }
 }
 async function cut() {
   await save(true);
-  const done = working(['Converting the chosen takes', 'Placing them on the timeline', 'Adding the end card'], 'Building the rough cut');
-  try { const r = await api(`productions/${P.id}/cut`, { method: 'POST', body: {} }); toast('Rough cut ready. Play it, adjust the voice or timing, then export.', 'ok'); go('create/' + r.id); }
+  const done = working([...(META.sound ? ['Recording the voices', 'Adding the sound of each shot', 'Composing the score'] : []), 'Converting the chosen takes', 'Placing them on the timeline', 'Adding the end card'], 'Cutting the film');
+  try { const r = await api(`productions/${P.id}/cut`, { method: 'POST', body: {} }); toast('Cut ready. Play it, adjust a line or the timing, then export.', 'ok'); go('create/' + r.id); }
   catch (e) { toast(e.message, 'error'); render(); }
   finally { done(); }
 }
@@ -224,7 +233,8 @@ function frame(s, cls = '') {
   if (take) {
     const v = h('video', { src: `/films/${P.id}/${take.file}`, poster: `/films/${P.id}/${take.poster}`, muted: true, loop: true, playsinline: true, preload: 'none', 'aria-label': s.action });
     v.muted = true;
-    return h('div', { class: 'sb-frame has-take ' + cls + (p.aspect === '9:16' ? ' tall' : ''), onmouseenter: () => v.play().catch(() => {}), onmouseleave: () => v.pause() }, v, h('span', { class: 'take-badge' }, icon('film', 11), 'Video'));
+    return h('div', { class: 'sb-frame has-take ' + cls + (p.aspect === '9:16' ? ' tall' : ''), onmouseenter: () => v.play().catch(() => {}), onmouseleave: () => v.pause() }, v,
+      h('span', { class: 'take-badge' }, icon(take.engine === 'talking' ? 'wave' : 'film', 11), take.engine === 'talking' ? 'Talking' : 'Video'));
   }
   return h('div', { class: 'sb-frame ' + cls + (p.aspect === '9:16' ? ' tall' : '') },
     s.board ? h('img', { src: `/films/${P.id}/${s.board}`, alt: s.action }) : h('div', { class: 'drawing' }, P.job?.status === 'running' ? 'Drawing…' : 'Not drawn'),
@@ -236,7 +246,7 @@ function shotCard(s, i, running, unsupported) {
     h('button', { class: 'shot-frame', onclick: () => inspect(i), 'aria-label': `Edit shot ${i + 1}` }, frame(s)),
     h('div', { class: 'shot-meta' }, h('b', {}, String(i + 1).padStart(2, '0')), h('span', {}, `${s.size} · ${s.move} · ${(+s.dur).toFixed(1)} s`),
       h('i', { class: 'engine', style: { '--c': color } }, label)),
-    s.vo ? h('p', { class: 'vo' }, icon('wave', 12), s.vo) : null,
+    s.vo ? h('p', { class: 'vo' }, icon('wave', 12), h('b', {}, speakerName(s) + '  '), s.vo) : null,
     s.super ? h('p', { class: 'super' }, '“', s.super, '”') : null,
     unsupported.length ? h('p', { class: 'warn' }, icon('shield', 12), `Not backed by the Proof Library: ${unsupported.join(', ')}`) : null,
     s.fallback ? h('p', { class: 'faint' }, `Drawn as a sketch: ${s.fallback}`) : null,
@@ -247,21 +257,44 @@ function takeStrip(s, running) {
   if (!shootable(s) || !(META.engines || []).length) return null;
   const pick = async t => { s.take = t.id; await save(true); render(); };
   return h('div', { class: 'takes' },
-    ...(s.takes || []).map((t, k) => h('button', { class: 'take' + (t.id === s.take ? ' on' : ''), title: `Take ${k + 1}${t.id === s.take ? ' (in the cut)' : ''}`, 'aria-pressed': t.id === s.take, onclick: () => pick(t) },
-      h('img', { src: `/films/${P.id}/${t.poster}`, alt: `Take ${k + 1}` }))),
+    ...(s.takes || []).map((t, k) => {
+      const c = t.check, low = c && Math.min(c.people || 5, c.product || 5, c.picture || 5);
+      return h('button', { class: 'take' + (t.id === s.take ? ' on' : ''), title: `Take ${k + 1}${t.id === s.take ? ' (in the cut)' : ''}${t.engine === 'talking' ? ' · talking' : ''}${c ? ` · ${c.note}` : ''}`, 'aria-pressed': t.id === s.take, onclick: () => pick(t) },
+        h('img', { src: `/films/${P.id}/${t.poster}`, alt: `Take ${k + 1}` }),
+        c ? h('i', { class: 'take-check ' + (low >= 4 ? 'good' : low >= 3 ? 'fair' : 'poor'), 'aria-label': c.note }, icon(low >= 4 ? 'check' : 'info', 10)) : null);
+    }),
     h('button', { class: 'chip', disabled: running, onclick: () => shoot([s.id]) }, icon('film', 12), s.takes?.length ? 'Another take' : 'Shoot'));
 }
 
+const speakerName = s => (s.speaker && s.speaker !== 'narrator' && P.production.cast.find(c => c.id === s.speaker)?.name) || 'VO';
+// a studio voice picker with a Listen button (a character's first line, or the narrator's)
+function voicePick(value, set, castId) {
+  const list = META.voices || [];
+  if (!list.length) return null;
+  const audio = new Audio();
+  const listen = h('button', { class: 'chip', type: 'button', onclick: async () => {
+    if (!value()) return;
+    listen.disabled = true;
+    try { await save(true); const r = await api(`productions/${P.id}/voice-sample`, { method: 'POST', body: { voice: value(), cast: castId } }); audio.src = r.url; await audio.play(); }
+    catch (e) { toast(e.message, 'error'); }
+    finally { listen.disabled = false; }
+  } }, icon('play', 11), 'Listen');
+  return h('div', { class: 'voice-pick' }, pillSelect([['', 'Choose a voice'], ...list.map(v => [v.id, `${v.name} · ${v.tag}`])], value() || '', v => { set(v || null); queueSave(); }, 'Voice'), listen);
+}
 function castPanel() {
   const p = P.production;
   if (!p.cast.length && !p.locations.length) return null;
   const item = (o, kind) => h('div', { class: 'cast-item' },
-    o.ref ? h('img', { class: 'cast-ref', src: `/films/${P.id}/${o.ref}`, alt: `${o.name}, reference portrait` }) : null,
+    o.ref ? h('div', { class: 'cast-refs' }, h('img', { class: 'cast-ref', src: `/films/${P.id}/${o.ref}`, alt: `${o.name}, reference portrait` }),
+      o.sheet ? h('img', { class: 'cast-ref full', src: `/films/${P.id}/${o.sheet}`, alt: `${o.name}, full length` }) : null) : null,
     h('b', {}, o.name), h('small', { class: 'faint' }, kind),
     h('textarea', { rows: 3, 'aria-label': `${o.name} look`, oninput: e => { o.look = e.target.value; queueSave(); } }, o.look),
-    o.wardrobe != null ? h('small', { class: 'faint' }, 'Wears ' + o.wardrobe) : null);
-  return h('details', { class: 'cast-panel' }, h('summary', {}, icon('eye', 13), `Cast & locations · ${p.cast.length + p.locations.length}`, h('small', { class: 'faint' }, '  Edit a look, then redraw the frames it appears in.')),
-    h('div', { class: 'cast-grid' }, p.cast.map(c => item(c, 'Character')), p.locations.map(l => item(l, 'Location'))));
+    o.wardrobe != null ? h('small', { class: 'faint' }, 'Wears ' + o.wardrobe) : null,
+    kind === 'Character' ? voicePick(() => o.voiceId, v => { o.voiceId = v; }, o.id) : null);
+  const narrator = (META.voices || []).length ? h('div', { class: 'cast-item narrator' }, h('b', {}, 'Narrator'), h('small', { class: 'faint' }, 'The voice-over'),
+    voicePick(() => p.narrator, v => { p.narrator = v; })) : null;
+  return h('details', { class: 'cast-panel' }, h('summary', {}, icon('eye', 13), `Cast & locations · ${p.cast.length + p.locations.length}`, h('small', { class: 'faint' }, '  Edit a look, then redraw the frames it appears in. Pick each voice and listen to it.')),
+    h('div', { class: 'cast-grid' }, narrator, p.cast.map(c => item(c, 'Character')), p.locations.map(l => item(l, 'Location'))));
 }
 
 // the shot inspector: edit, redraw with a note, move, insert, delete
@@ -287,7 +320,8 @@ function inspect(i) {
           h('div', { class: 'row2' }, field('Made with', sel(Object.entries(ENGINE).map(([k, [l]]) => [k, l]), s.engine, v => edit('engine', v))),
             p.media?.length ? field('Product photo', sel([[-1, 'None'], ...p.media.map((m, k) => [k, `Photo ${k + 1}`])], s.product, v => edit('product', +v))) : null),
           field('Action', h('textarea', { rows: 3, oninput: e => edit('action', e.target.value) }, s.action)),
-          field('Voice-over', h('textarea', { rows: 2, oninput: e => edit('vo', e.target.value) }, s.vo)),
+          h('div', { class: 'row2' }, field('Spoken line', h('textarea', { rows: 2, oninput: e => edit('vo', e.target.value) }, s.vo)),
+            field('Said by', sel([['narrator', 'Narrator (voice-over)'], ...p.cast.map(c => [c.id, c.name])], s.speaker || 'narrator', v => edit('speaker', v)))),
           field('On-screen text', h('input', { value: s.super, oninput: e => edit('super', e.target.value) })))),
       h('div', { class: 'actions' }, note, redraw),
       h('div', { class: 'actions' },
@@ -305,7 +339,7 @@ async function save(now = false) {
   clearTimeout(saveTimer);
   const p = P.production;
   try {
-    const r = await api('productions/' + P.id, { method: 'PUT', body: { title: p.title, cast: p.cast, locations: p.locations, shots: p.shots } });
+    const r = await api('productions/' + P.id, { method: 'PUT', body: { title: p.title, narrator: p.narrator ?? null, cast: p.cast, locations: p.locations, shots: p.shots } });
     if (now) Object.assign(P, r); else P.review = r.review;
   } catch (e) { toast(e.message, 'error'); }
 }

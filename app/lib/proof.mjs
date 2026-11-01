@@ -51,6 +51,11 @@ function clean(input, prev = {}) {
     tags: (Array.isArray(input.tags) ? input.tags : prev.tags || []).map(t => s(t, 30).toLowerCase()).filter(Boolean).slice(0, 12),
     owner: s(input.owner ?? prev.owner, 80),
     expires: /^\d{4}-\d{2}-\d{2}$/.test(input.expires ?? '') ? input.expires : input.expires === '' ? null : prev.expires ?? null,
+    // a customer quote is a testimonial: it may only be used with the person's recorded consent
+    consent: (() => {
+      const c = input.consent === undefined ? prev.consent : input.consent;
+      return c && /^\d{4}-\d{2}-\d{2}$/.test(c.on || '') ? { on: c.on, by: s(c.by, 120), where: s(c.where, 300) } : null;
+    })(),
   };
   if (!e.claim) throw bad('A proof entry needs the claim itself.');
   if (e.source.url && !/^https?:\/\//.test(e.source.url)) throw bad('The source link must start with http:// or https://');
@@ -70,10 +75,11 @@ export function updateProof(id, input, by) {
   if (i < 0) throw Object.assign(new Error('no such proof entry'), { code: 404 });
   const prev = list[i];
   const next = { ...prev, ...clean(input, prev), updated: new Date().toISOString(), updatedBy: by || null };
-  // changing what an approved entry says sends it back for approval
-  if (prev.status === 'approved' && ['claim', 'value', 'metric'].some(k => next[k] !== prev[k])) { next.status = 'draft'; next.approvedBy = null; }
+  // changing what an approved entry says, or withdrawing consent, sends it back for approval
+  if (prev.status === 'approved' && (['claim', 'value', 'metric'].some(k => next[k] !== prev[k]) || (prev.consent && !next.consent))) { next.status = 'draft'; next.approvedBy = null; }
   if (STATUSES.includes(input.status) && input.status !== next.status) {
     if (input.status === 'approved' && !next.source.title && !next.source.url) throw bad('Add a source before approving: a study, document, link or customer.');
+    if (input.status === 'approved' && next.kind === 'quote' && next.source.type === 'customer' && !next.consent) throw bad('Record the customer’s consent (the date they agreed, and where it is kept) before approving their quote.');
     next.status = input.status;
     next.approvedBy = input.status === 'approved' ? by || 'local' : null;
     next.approvedAt = input.status === 'approved' ? new Date().toISOString() : null;

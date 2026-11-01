@@ -1,5 +1,5 @@
 // Proof Library: approved facts with sources. The only numbers and claims Claude may put in an asset.
-import { $$, h, api, icon, toast, sheet, app, segmented } from './core.js';
+import { $$, h, api, icon, toast, sheet, app, segmented, hasRole } from './core.js';
 
 const SOURCE_TYPES = [['study', 'Published study'], ['internal', 'Internal data'], ['customer', 'Customer'], ['regulatory', 'Regulatory'], ['web', 'Web page']];
 const STATE_LABEL = { approved: 'Approved', draft: 'Draft', expired: 'Expired', retired: 'Retired' };
@@ -54,7 +54,8 @@ function row(e) {
       h('span', { class: 'badge ' + ({ approved: 'done', draft: '', expired: 'failed', retired: '' }[e.state]) }, STATE_LABEL[e.state]),
       h('small', { class: 'faint' }, [e.owner, e.expires ? (e.state === 'expired' ? 'expired ' : 'until ') + e.expires : null].filter(Boolean).join(' · ')),
       h('div', { class: 'actions' },
-        e.state === 'draft' ? h('button', { class: 'btn', onclick: () => setStatus(e, 'approved') }, icon('check', 13), 'Approve') : null,
+        e.state === 'draft' && hasRole('reviewer') ? h('button', { class: 'btn', onclick: () => setStatus(e, 'approved') }, icon('check', 13), 'Approve') : null,
+        e.kind === 'quote' && e.source?.type === 'customer' ? h('span', { class: 'badge ' + (e.consent ? 'done' : 'failed') }, e.consent ? 'Consent on file' : 'No consent') : null,
         h('button', { class: 'btn ghost', onclick: () => editor(e) }, 'Edit'))));
 }
 
@@ -79,6 +80,12 @@ function editor(e = null) {
     tags.addEventListener('input', () => { d.tags = tags.value.split(',').map(t => t.trim()).filter(Boolean); });
     const expires = h('input', { type: 'date', value: d.expires || '' });
     expires.addEventListener('input', () => { d.expires = expires.value; });
+    // a customer quote is a testimonial: it needs the person's recorded consent before it can be approved
+    d.consent ||= { on: '', by: '', where: '' };
+    const consent = h('div', { class: 'field', hidden: d.kind !== 'quote' }, h('span', {}, 'Consent to use this quote'),
+      h('div', { class: 'row2' }, (() => { const i = h('input', { type: 'date', value: d.consent.on || '' }); i.addEventListener('input', () => { d.consent.on = i.value; }); return i; })(), inp(d.consent, 'by', { placeholder: 'Who agreed (name)' })),
+      inp(d.consent, 'where', { placeholder: 'Where the signed release is kept' }),
+      h('small', { class: 'faint' }, 'The date they agreed and where the signed release is kept. Without it, a customer quote can’t be approved or used.'));
 
     // evidence search
     const pq = h('input', { placeholder: 'Search PubMed, e.g. photoplethysmography sleep apnea wearable' });
@@ -111,7 +118,7 @@ function editor(e = null) {
     return h('div', { class: 'sheet-body' },
       h('div', { class: 'eyebrow' }, e ? 'Edit proof' : 'New proof'),
       h('h2', { class: 'title-l' }, e ? 'Edit the claim' : 'Add a claim your team may make'),
-      f('Kind', segmented([{ v: 'stat', label: 'Statistic' }, { v: 'fact', label: 'Fact' }, { v: 'quote', label: 'Customer quote' }], d.kind, v => { d.kind = v; }, { label: 'Kind' })),
+      f('Kind', segmented([{ v: 'stat', label: 'Statistic' }, { v: 'fact', label: 'Fact' }, { v: 'quote', label: 'Customer quote' }], d.kind, v => { d.kind = v; consent.hidden = v !== 'quote'; }, { label: 'Kind' })),
       f('Claim', claim, 'Write it the way it may be said. Approved wording is used exactly as written.'),
       h('div', { class: 'row2' }, f('Value', inp(d, 'value', { placeholder: '92%' })), f('Metric', inp(d, 'metric', { placeholder: 'apnea events detected' }))),
       h('div', { class: 'field' }, h('span', {}, 'Source'), h('div', { class: 'row2' }, h('label', { class: 'pill-select', style: { width: '100%' } }, srcType, icon('chevronD', 12)), srcTitle), srcURL, citation),
@@ -119,9 +126,11 @@ function editor(e = null) {
       f('Disclaimer', inp(d, 'disclaimer', { placeholder: 'e.g. Not a diagnostic device. Results from a single-site study.' }), 'Shown wherever the claim is used.'),
       h('div', { class: 'row2' }, f('Tags', tags), f('Owner', inp(d, 'owner', { placeholder: 'Who answers for it' }))),
       f('Expires', expires, 'After this date the claim is no longer used.'),
+      consent,
       h('div', { class: 'actions' },
-        h('button', { class: 'btn primary', onclick: () => save(true) }, icon('check', 14), 'Save and approve'),
-        h('button', { class: 'btn', onclick: () => save(false) }, 'Save as draft'),
+        hasRole('reviewer') ? h('button', { class: 'btn primary', onclick: () => save(true) }, icon('check', 14), 'Save and approve') : null,
+        h('button', { class: hasRole('reviewer') ? 'btn' : 'btn primary', onclick: () => save(false) }, 'Save as draft'),
+        hasRole('reviewer') ? null : h('small', { class: 'faint' }, 'A medical, legal and regulatory reviewer approves it.'),
         h('span', { style: { flex: 1 } }),
         e && e.status !== 'retired' ? h('button', { class: 'btn ghost', onclick: async () => { await setStatus(e, 'retired'); close(); } }, 'Retire') : null,
         e ? h('button', { class: 'btn ghost danger', onclick: async () => { if (!confirm('Delete this entry? Assets that already cite it keep their text.')) return; await api('proof/' + e.id, { method: 'DELETE' }); await loadProof(); render(); close(); } }, 'Delete') : null));

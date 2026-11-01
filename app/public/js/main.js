@@ -8,8 +8,11 @@ import { mountBrands, showBrands, loadBrands } from './brands.js';
 import { mountProof, showProof } from './proof.js';
 import { mountDecks, showDecks } from './decks.js';
 import { mountProductions, showProductions } from './productions.js';
+import { mountReview, showReview, reviewCount } from './review.js';
+import { mountSpend, showSpend } from './spend.js';
+import { mountTeam, showTeam } from './team.js';
 
-const VIEWS = { create: showCreate, productions: showProductions, studio: showStudio, gallery: showGallery, library: showLibrary, brands: showBrands, proof: showProof, decks: showDecks };
+const VIEWS = { create: showCreate, productions: showProductions, studio: showStudio, gallery: showGallery, library: showLibrary, brands: showBrands, proof: showProof, decks: showDecks, review: showReview, spend: showSpend, team: showTeam };
 
 async function boot() {
   $$('[data-icon]').forEach(s => s.replaceWith(icon(s.dataset.icon, 18)));
@@ -28,6 +31,9 @@ async function boot() {
   mountProof($('#view-proof'));
   mountDecks($('#view-decks'));
   mountProductions($('#view-productions'));
+  mountReview($('#view-review'));
+  mountSpend($('#view-spend'));
+  mountTeam($('#view-team'));
   window.addEventListener('hashchange', () => emit('route', parseRoute()));
   on('route', route);
   route(parseRoute());
@@ -54,6 +60,8 @@ async function route({ view, args }) {
 
 async function pollLive() {
   try { $('#nav-live').hidden = !(await api('films')).some(f => f.mode === 'director' && f.status === 'running'); } catch {}
+  // how many versions are waiting for this person's sign-off
+  try { const n = await reviewCount(); $('#nav-review').hidden = !n; $('#nav-review').textContent = n; } catch {}
 }
 
 boot().catch(e => toast('Could not start the studio: ' + e.message, 'error', 15000));

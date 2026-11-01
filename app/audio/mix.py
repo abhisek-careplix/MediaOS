@@ -1,9 +1,12 @@
 """Quick-mode mix: an original synthesized score, foley on the page's events, and narration → <film>/out/mix.wav
 usage: <LIB>/.venv/bin/python mix.py <film dir>
 Reads <film>/events.json (from core/render/events.mjs), <film>/content.json and <film>/voice/<id>.wav.
+A cut from a production can bring its own sound: content.score (a composed score, a WAV in the film folder) replaces the
+synthesized one, and a scene's sound (the ambience and foley made for its shot, a WAV) plays under it from the cut.
 Uses the library's core/audio/sfx.py (LIB = library root, default ~/lemo-opuscar)."""
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -192,13 +195,59 @@ def voices():
         add(vox, a * (.1 / rms), e['t'], 1.0)
 
 
-(score_swiss if TPL == 'swiss' else score_keynote)()
-music *= .035 / (np.sqrt(np.mean(music[:int(end_t * SR)] ** 2)) + 1e-9)
+def stereo(rel):
+    """a WAV from the film folder as stereo at SR, or None if it isn't there"""
+    if not isinstance(rel, str) or not re.fullmatch(r'(score|sound)/[\w-]+\.wav', rel): return None
+    f = os.path.join(film, rel)
+    if not os.path.isfile(f): return None
+    a, sr = sf.read(f, dtype='float64', always_2d=True)
+    a = np.repeat(a[:, :1], 2, 1) if a.shape[1] == 1 else a[:, :2]
+    return soxr.resample(a, sr, SR) if sr != SR else a
+
+
+def fades(a, fin, fout):
+    n, m = min(len(a), int(fin * SR)), min(len(a), int(fout * SR))
+    if n: a[:n] *= np.linspace(0, 1, n)[:, None]
+    if m: a[-m:] *= np.linspace(1, 0, m)[:, None]
+    return a
+
+
+def rms(a): return np.sqrt(np.mean(a ** 2)) + 1e-9
+
+
+def composed():
+    """the production's score, laid from the top and faded out as the film ends"""
+    a = stereo(content.get('score'))
+    if a is None: return False
+    a = fades(a[:N].copy(), .05, 0)
+    music[:len(a)] += a * (.05 / rms(a[:int(min(DUR, len(a) / SR) * SR)]))
+    k = int(max(0, DUR - 1.6) * SR)
+    music[k:] *= np.linspace(1, 0, len(music) - k)[:, None] ** 1.5
+    return True
+
+
+def beds():
+    """each shot's own ambience and foley, for exactly as long as the shot is on screen"""
+    for e in EV:
+        if e['type'] != 'scene': continue
+        sc = content['scenes'][e['i']] if e['i'] < len(content['scenes']) else {}
+        a = stereo(sc.get('sound'))
+        if a is None: continue
+        a = fades(a[:int((e['dur'] + .08) * SR)].copy(), .03, .12)
+        s = int(e['t'] * SR)
+        n = min(len(a), N - s)
+        if n > 0: fol[s:s + n] += a[:n] * (.03 / rms(a))
+
+
+if not composed():
+    (score_swiss if TPL == 'swiss' else score_keynote)()
+    music *= .035 / (np.sqrt(np.mean(music[:int(end_t * SR)] ** 2)) + 1e-9)
 fx = FOLEY.get(TPL, FOLEY['swiss'])
 for e in EV:
     if e['type'] in fx:
         x, g = fx[e['type']](e)
         add(fol, x, e['t'], g)
+beds()
 voices()
 
 # duck music ~10 dB and foley ~4 dB while the voice speaks

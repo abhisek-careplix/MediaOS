@@ -110,9 +110,20 @@ Storyboard frames become video shots in **Productions → Shoot**. People see th
 |---|---|---|
 | Standard | Veo 3.1 Fast on Vertex AI | nothing: the VM's service account, like the frames |
 | Premium | Veo 3.1 on Vertex AI | nothing |
-| Character | Kling through fal.ai | a fal.ai key: `./deploy/gcp-keys.sh` asks for it (not shown), stores it in the VM's `.env`, restarts the app, and can also save it in `.env.local` for local testing |
+| Character | Kling 3 Pro through fal.ai, given each character's portrait and full-length view | a fal.ai key: `./deploy/gcp-keys.sh` asks for it (not shown), stores it in the VM's `.env`, restarts the app, and can also save it in `.env.local` for local testing |
 
-A shot needs an Illustrated or Cinematic frame to start from; graphics shots stay brand cards. **Make the rough cut** puts the chosen takes on the timeline with the voice-over and music and opens it in Create. `./deploy/gcp-keys.sh FAL_KEY --off` removes the key.
+A shot needs an Illustrated or Cinematic frame to start from; graphics shots stay brand cards. `./deploy/gcp-keys.sh FAL_KEY --off` removes the key. The fal.ai account needs credit: with none, the app says so and falls back where it can.
+
+The same key turns on the rest of the studio:
+
+| In the app | What happens | Model (fal.ai) | Rough price |
+|---|---|---|---|
+| Voices (each character and the narrator) | every spoken line is recorded once and reused by the takes and the film | ElevenLabs Multilingual v2 | $0.10 per 1,000 characters |
+| Talking shots | a presenter shot is performed from its frame and its speaker's line, lips in time | OmniHuman 1.5 | $0.16 a second |
+| Each take's sound | ambience and foley made from the picture | MMAudio v2 | $0.001 a second |
+| The score | an original instrumental the length of the cut | ElevenLabs Music | $0.60 a minute |
+
+Every take is also checked against the cast's portraits and the product photo (a Gemini Flash model on Vertex AI, under a cent a take), and the result shows as a dot on the take. **Make the cut** puts the chosen takes on the timeline with the voices, each shot's sound and the score, and opens it in Create. Without the key, films use the offline voice and the built-in score.
 
 ## Google sign-in, CarePlix only
 
@@ -139,8 +150,20 @@ Then add these to `.env` (the commented block at the bottom of `.env.example`) a
 | `ALLOWED_DOMAINS` | `careplix.com` (comma-separate to add more) |
 | `SESSION_SECRET` | `openssl rand -hex 32`; changing it signs everyone out |
 | `MAX_DIRECTORS`, `DIRECTOR_USERS` | Director productions at once (0 = off), and who may start them |
+| `ADMIN_EMAILS` | People who are always admins and give everyone else their roles on the Team page |
 
 With sign-in on, open access switches off by itself, every route needs a CarePlix session, and Director mode can be enabled.
+
+## Review, roles and spend
+
+Nothing is meant to be published without three sign-offs, in order: the **creative lead**, then **medical, legal and regulatory** (MLR), then the **budget owner**. Each is a role on the **Team** page. Anyone who signs in is a Creator; `ADMIN_EMAILS` names the admins who give the other roles. Running locally, the one local user holds every role.
+
+- **Review** takes a frozen copy of an exported film or deck, so later edits never change what was signed. The **claims check** reads every line against the Proof Library as soon as it is submitted. MLR can't sign while a flagged claim, testimonial or piece of health wording is open: it is fixed in a new version, or accepted with a written reason. Each sign-off records the signer's typed name, the statement they confirmed and the file's SHA-256. An approval **lapses** by itself if a Proof Library entry it relied on later changes, is retired or expires.
+- **Proof**: only MLR reviewers approve entries. A customer quote is a testimonial and can't be approved without recorded consent: the date they agreed and where the signed release is kept.
+- **Spend** records every paid generation (writing, frames, video, directed films) with who, which product and which asset. A budget owner sets monthly caps for the studio, per person and per product. New paid work that would pass a cap is refused; a running job finishes.
+- **Audit trail**: every submission, comment, sign-off, accepted item, proof change, role change and cap change, in `governance/audit.jsonl`. Each line carries the hash of the one before, so an edited or deleted line shows as **Broken**.
+
+All of it lives in `/data/governance` on the server (`governance/` locally).
 
 ## Tested
 

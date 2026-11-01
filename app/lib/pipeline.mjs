@@ -1,9 +1,13 @@
-// Quick-mode render: narration (Kokoro) → events → frames (headless Chrome) → mix → master, using the library's core/ tools.
+// Quick-mode render: narration → events → frames (headless Chrome) → mix → master, using the library's core/ tools.
+// Narration is a studio voice (lib/voice.mjs) where the film or a scene asks for one and the service is reachable,
+// otherwise the offline voice (Kokoro).
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { emit } from './jobs.mjs';
 import { LIB, APP } from './paths.mjs';
+import { STUDIO_VOICES, isStudioVoice, studioReady, speak } from './voice.mjs';
+import { VOICES } from './templates.mjs';
 
 const PY = path.join(LIB, '.venv', 'bin', 'python');
 
@@ -44,15 +48,38 @@ export async function renderQuick(job, meta) {
   const slug = (content.title || 'film').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'film';
   const outFile = path.join(dir, `${slug}.mp4`);
   try {
-    // 1. narration: one WAV per scene, then the real durations go back into content.json so the timeline fits the voice
+    // 1. narration: one WAV per scene, then the real durations go back into content.json so the timeline fits the voice.
+    // A scene's own voice (a character's line in a cut from a production) wins over the film's narrator.
     delete content.voice;
-    const lines = content.scenes.map((s, i) => ({ id: 's' + i, text: (s.narration || '').trim(), voice: meta.voice || 'af_heart', speed: 1.0 })).filter(l => l.text);
+    const known = v => isStudioVoice(v) || VOICES.some(x => x[0] === v);
+    const lines = content.scenes.map((s, i) => ({ id: 's' + i, text: (s.narration || '').trim(), voice: [s.voice, meta.voice].find(known) || 'af_heart', speed: 1.0 })).filter(l => l.text);
     if (meta.narration !== false && lines.length) {
       emit(job, { step: 'Recording narration', pct: 3 });
-      fs.rmSync(path.join(dir, 'voice'), { recursive: true, force: true });
-      fs.writeFileSync(path.join(dir, 'lines.json'), JSON.stringify(lines, null, 1));
-      await run(job, PY, [path.join(LIB, 'core/tts/tts.py'), path.join(dir, 'lines.json'), path.join(dir, 'voice')]);
-      content.voice = { durs: JSON.parse(fs.readFileSync(path.join(dir, 'voice', 'dur.json'), 'utf8')) };
+      const vdir = path.join(dir, 'voice'), durs = {};
+      fs.rmSync(vdir, { recursive: true, force: true });
+      fs.mkdirSync(vdir, { recursive: true });
+      // studio lines first (kept in voicecache/, so a re-render only records what changed); any that can't be recorded
+      // join the offline ones in that voice's stand-in
+      const offline = [];
+      for (const l of lines) {
+        if (!isStudioVoice(l.voice)) { offline.push(l); continue; }
+        try {
+          if (!studioReady()) throw new Error('the studio voices aren’t set up');
+          const r = await speak({ text: l.text, voice: l.voice, cacheDir: path.join(dir, 'voicecache') });
+          fs.copyFileSync(r.file, path.join(vdir, l.id + '.wav'));
+          durs[l.id] = r.dur;
+        } catch (e) {
+          emit(job, {}, `Studio voice unavailable for ${l.id} (${e.message}); using the offline voice`);
+          offline.push({ ...l, voice: STUDIO_VOICES[l.voice].k });
+        }
+      }
+      if (offline.length) {
+        fs.writeFileSync(path.join(dir, 'lines.json'), JSON.stringify(offline, null, 1));
+        await run(job, PY, [path.join(LIB, 'core/tts/tts.py'), path.join(dir, 'lines.json'), vdir]);
+        Object.assign(durs, JSON.parse(fs.readFileSync(path.join(vdir, 'dur.json'), 'utf8')));
+      }
+      fs.writeFileSync(path.join(vdir, 'dur.json'), JSON.stringify(durs, null, 1));
+      content.voice = { durs };
     } else {
       content.voice = { durs: {} };
       content.scenes.forEach((s, i) => { content.voice.durs['s' + i] = 0; });

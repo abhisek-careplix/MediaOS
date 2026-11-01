@@ -10,6 +10,7 @@ import { LIB } from './paths.mjs';
 import { TEMPLATES, VOICES } from './templates.mjs';
 import { FONT_LIST, PRESETS } from './brands.mjs';
 import { authOn } from './auth.mjs';
+import { charge, billed } from './ledger.mjs';
 
 // Deployed, Claude gets only what it needs: never the session secret or the Google client secret.
 const KEEP = ['PATH', 'HOME', 'USER', 'SHELL', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'LEMO_OPUSCAR_HOME', 'HF_ENDPOINT', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'NODE_EXTRA_CA_CERTS'];
@@ -141,7 +142,7 @@ export async function askJSON(prompt, schema, { model = 'sonnet', timeout = 2400
     let obj = res.structured_output;
     if (!obj && typeof res.result === 'string') { const m = res.result.match(/\{[\s\S]*\}/); if (m) obj = JSON.parse(m[0]); }
     if (!obj) throw new Error('The AI writer’s answer was incomplete. Try again.');
-    return { data: obj, cost: res.total_cost_usd, ms: res.duration_ms };
+    return billed('writer', { data: obj, cost: res.total_cost_usd, ms: res.duration_ms });
   } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
 }
 
@@ -171,7 +172,7 @@ export async function writeScript({ prompt, template, seconds = 30, aspect = '16
     }
     if (!script?.scenes?.length) throw new Error('The AI writer didn’t return a script. Try again.');
     for (const s of script.scenes) if (s.type === 'product' && !(s.image >= 0 && s.image < photos.length)) s.image = 0;
-    return { script, cost: res.total_cost_usd, ms: res.duration_ms };
+    return billed('writer', { script, cost: res.total_cost_usd, ms: res.duration_ms });
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -209,7 +210,7 @@ ${examples}`;
     try { res = JSON.parse(out); } catch { throw new Error(plain((err || out || 'The AI writer returned nothing. Try again.').trim().slice(0, 300))); }
     if (res.is_error) throw /log ?in/i.test(String(res.result)) ? notSignedIn() : new Error(plain(res.result));
     const kit = res.structured_output || JSON.parse((String(res.result).match(/\{[\s\S]*\}/) || ['{}'])[0]);
-    return { ...kit, source: 'generated', cost: res.total_cost_usd };
+    return billed('writer', { ...kit, source: 'generated', cost: res.total_cost_usd });
   } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
 }
 
@@ -295,6 +296,7 @@ export async function runDirector(job, opts) {
   const title = filmTitle(job.dir, final.result || '');
   const meta = readMeta(job.dir) || {};
   writeMeta(job.dir, { ...meta, filmTitle: title || meta.filmTitle, cost: final.total_cost_usd ?? null });
+  charge('director', final.total_cost_usd || 0, { asset: job.id, brandId: meta.brandId || null });
 }
 
 // the film's title: the quoted name in its treatment's first heading, else a bold name right after "made"
