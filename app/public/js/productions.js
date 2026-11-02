@@ -24,11 +24,13 @@ const SHOOT = { engine: null, takes: 1 };
 const shootable = s => s.engine !== 'code' && /\.png$/.test(s.board || '');
 const lengthFor = (e, d) => e.durations.find(x => x >= d) || e.durations.at(-1);
 // where a line sits in its shot (as lib/productions.mjs LEAD and TAIL)
-const LEAD = 0.35, TAIL = 0.75, TALK_RATE = 0.16;
+const LEAD = 0.35, TAIL = 0.75;
 const lineSecs = s => (s.line ? s.line.dur : String(s.vo || '').trim().split(/\s+/).filter(Boolean).length / 2.6);
-// presenter shots with a line are performed by a talking character when the server can (priced by the line's length)
+// presenter shots with a line are performed by a talking character when the server can (priced by the line's length,
+// at the server's price and minimum)
 const performed = s => s.engine === 'presenter' && META.talking && !!String(s.vo || '').trim();
-const estimate = (shots, e, takes) => shots.reduce((t, s) => t + (performed(s) ? (LEAD + lineSecs(s) + TAIL) * TALK_RATE : lengthFor(e, Math.max(+s.dur || 3, s.vo ? LEAD + lineSecs(s) + TAIL : 0)) * e.rate) * takes, 0);
+const talkCost = s => Math.max(LEAD + lineSecs(s) + TAIL, META.talkPrice.min) * META.talkPrice.rate;
+const estimate = (shots, e, takes) => shots.reduce((t, s) => t + (performed(s) ? talkCost(s) : lengthFor(e, Math.max(+s.dur || 3, s.vo ? LEAD + lineSecs(s) + TAIL : 0)) * e.rate) * takes, 0);
 // frame styles this server can make: Sketch always; Illustrated and Cinematic when Vertex AI is reachable
 const meta = async () => META || (META = await api('productions/meta').catch(() => ({ styles: [{ id: 'sketch', name: 'Sketch' }], vertex: { ok: false } })));
 const styles = () => META.styles.filter(s => !s.vertex || META.vertex.ok);

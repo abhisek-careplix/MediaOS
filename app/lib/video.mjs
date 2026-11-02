@@ -51,6 +51,8 @@ const TALKERS = [
   { model: process.env.TALK_FALLBACK_MODEL || 'fal-ai/kling-video/ai-avatar/v2/pro', rate: 0.115, minutes: 15, input: {} },
 ];
 export const talkingReady = () => falReady();
+// what a talking shot costs with the first choice: USD a second, and the shortest it bills (a shorter line is padded to it)
+export const talkingPrice = () => ({ rate: TALKERS[0].rate, min: TALKERS[0].minAudio || 0 });
 const sh = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, { timeout: 180000 }, (e, out) => (e ? rej(e) : res(String(out).trim()))));
 // { image: { data, mime }, audio: { data (a WAV), mime }, prompt } → { mp4 (with the line as its sound), seconds, cost }
 export async function performClip({ image, audio, prompt }) {

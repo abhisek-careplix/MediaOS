@@ -18,7 +18,7 @@ import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, s
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
 import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf, takeFor } from './lib/productions.mjs';
-import { talkingReady } from './lib/video.mjs';
+import { talkingReady, talkingPrice } from './lib/video.mjs';
 import { soundReady } from './lib/sound.mjs';
 import { engines, ENGINES, lengthFor } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
@@ -194,7 +194,7 @@ async function api(req, res, url, user) {
     if (M === 'GET' && parts[1] === 'meta') {
       const v = await vertexStatus();
       return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok }, engines: await engines(),
-        voices: studioReady() ? Object.entries(STUDIO_VOICES).map(([id, x]) => ({ id, name: x.name, tag: x.tag, who: x.who })) : [], talking: talkingReady(), sound: soundReady() });
+        voices: studioReady() ? Object.entries(STUDIO_VOICES).map(([id, x]) => ({ id, name: x.name, tag: x.tag, who: x.who })) : [], talking: talkingReady(), talkPrice: talkingPrice(), sound: soundReady() });
     }
     if (M === 'POST' && !parts[1]) {
       const b = await body(req);
