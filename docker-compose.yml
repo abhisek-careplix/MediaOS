@@ -13,6 +13,9 @@ services:
     # a deploy lets running renders and shoots finish (up to DRAIN_MINUTES, 15) before the old container stops
     stop_grace_period: 20m
     shm_size: "1gb"   # headless Chromium needs more than Docker's 64 MB default
+    logging: &logs   # the server's log, kept to 5 × 20 MB so it can't fill the disk
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
 
   caddy:
     image: caddy:2
@@ -28,6 +31,7 @@ services:
     depends_on:
       - videogen
     restart: unless-stopped
+    logging: *logs
 
 volumes:
   videogen-data:

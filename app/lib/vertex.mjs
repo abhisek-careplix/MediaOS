@@ -17,20 +17,27 @@ const PRICES = { 'gemini-2.5-flash-image': 30, 'gemini-3.1-flash-image': 60, 'ge
 const PRICE = +(process.env.VERTEX_IMAGE_PRICE || PRICES[IMAGE_MODEL] || 60) / 1e6;
 
 const gcloud = args => new Promise((res, rej) => execFile('gcloud', args, { timeout: 20000 }, (e, out) => e ? rej(e) : res(String(out).trim())));
-let onGCE = null;
+// off Google Cloud, the metadata server is asked again only every 10 minutes; on it, one slow answer is just retried
+// (it never switches the server to gcloud, which a deployed server doesn't have)
+let onGCE = null, probed = 0;
 async function metadata(p) {
-  if (onGCE === false) return null;
+  if (onGCE === false && Date.now() - probed < 600e3) return null;
   try {
-    const r = await fetch(META + p, { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(onGCE ? 3000 : 600) });
+    const r = await fetch(META + p, { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(onGCE ? 3000 : 1500) });
     onGCE = r.ok;
+    probed = Date.now();
     return r.ok ? r.text() : null;
-  } catch { onGCE = false; return null; }
+  } catch {
+    if (!onGCE) { onGCE = false; probed = Date.now(); }
+    return null;
+  }
 }
 
 let cached = null, project = process.env.VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || null;
 async function token() {
   if (cached && cached.exp > Date.now() + 120e3) return cached.token;
-  const m = await metadata('/instance/service-accounts/default/token');
+  let m = await metadata('/instance/service-accounts/default/token');
+  if (!m && onGCE) m = await metadata('/instance/service-accounts/default/token');   // on Google Cloud: ask again, never gcloud
   if (m) { const j = JSON.parse(m); cached = { token: j.access_token, exp: Date.now() + j.expires_in * 1000 }; return cached.token; }
   const t = await gcloud(['auth', 'print-access-token']);
   cached = { token: t, exp: Date.now() + 45 * 60e3 };

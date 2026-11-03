@@ -4,6 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
+import { scrub } from './plain.mjs';
 
 const jobs = new Map();
 const BACKLOG = 2000;
@@ -11,8 +12,13 @@ const BACKLOG = 2000;
 export function readMeta(dir) {
   try { return JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')); } catch { return null; }
 }
+// written whole or not at all (a full disk leaves the old file, never an empty one)
+export function writeJSON(file, data) {
+  fs.writeFileSync(file + '.tmp', JSON.stringify(data, null, 1));
+  fs.renameSync(file + '.tmp', file);
+}
 export function writeMeta(dir, meta) {
-  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 1));
+  writeJSON(path.join(dir, 'meta.json'), meta);
 }
 export function readLog(dir) {
   try {
@@ -45,6 +51,9 @@ function poster(job) {
 }
 
 export function emit(job, patch = {}, line = null) {
+  // what reaches the browser is in plain words (no provider names or server paths); the raw text is in the server log
+  if (line) { if (scrub(line) !== line) console.log(`[${job.id}]`, line); line = scrub(line); }
+  for (const k of ['step', 'error']) if (patch[k]) patch[k] = scrub(patch[k]);
   Object.assign(job, patch);
   if (line) {
     job.log.push(line);
@@ -67,11 +76,19 @@ export function subscribe(job, res) {
   res.write(`data: ${JSON.stringify({ ...snapshot(job), backlog: job.log.slice(-BACKLOG) })}\n\n`);
   if (job.status !== 'running') return res.end();
   job.listeners.add(res);
-  res.on('close', () => job.listeners.delete(res));
+  // a comment line now and then, so proxies don't close a stream that's quiet during a long take
+  const beat = setInterval(() => res.write(': still working\n\n'), 20000);
+  res.on('close', () => { clearInterval(beat); job.listeners.delete(res); });
 }
 
 export function cancel(job) {
   if (job.status !== 'running') return;
+  // work that pays per item (takes, frames) stops starting new items and ends itself once those under way are in
+  if (job.graceful) {
+    if (!job.cancelled) emit(job, { step: 'Stopping after the work under way…' }, 'Stopping: no new takes or frames will start.');
+    job.cancelled = true;
+    return;
+  }
   job.cancelled = true;
   if (job.proc) try { job.proc.kill('SIGTERM'); } catch {}
   emit(job, { status: 'cancelled', step: 'Cancelled' }, 'Cancelled.');

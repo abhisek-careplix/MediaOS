@@ -123,7 +123,7 @@ async function composer(el, preset) {
     h('div', { class: 'field' }, h('span', {}, 'Style'), pick),
     h('div', { class: 'field' }, h('span', {}, 'The film'), h('div', { class: 'glow' }, h('div', { class: 'prompt' }, ta))),
     h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' } },
-      segmented([['30'], ['45'], ['60'], ['90']].map(([v]) => ({ v, label: v + ' s' })), st.seconds, v => { st.seconds = v; }, { label: 'Length' }),
+      segmented([['30'], ['45'], ['60']].map(([v]) => ({ v, label: v + ' s' })), st.seconds, v => { st.seconds = v; }, { label: 'Length' }),
       segmented([{ v: '16:9', icon: 'landscape', label: '16:9' }, { v: '9:16', icon: 'portrait', label: '9:16' }], st.aspect, v => { st.aspect = v; }, { label: 'Format' }),
       pillSelect([['opus', 'Best director (recommended)'], ['sonnet', 'Faster director (cheaper)']], st.model, v => { st.model = v; }, 'Director'),
       pillSelect([['', 'No brand kit'], ...(app.brands || []).map(b => [b.id, b.name])], st.brandId, v => { st.brandId = v; }, 'Brand kit')),

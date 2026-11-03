@@ -455,7 +455,8 @@ export function resultView(id, output, title, close, again) {
       output.endsWith('.mp4') ? h('a', { class: 'btn', href: src.replace(/\.mp4$/, '.srt'), download: true }, 'Subtitles') : null,
       again ? h('button', { class: 'btn ghost', onclick: again }, 'Export again') : null,
       h('span', { style: { flex: 1 } }), h('button', { class: 'btn ghost', onclick: close }, 'Done')),
-    h('div', { class: 'pathline' }, `${app.cfg.films}/${id}/${output}`));
+    // where the file is on this computer, when the studio runs on it (a hosted studio's folders mean nothing to people)
+    app.me?.auth ? null : h('div', { class: 'pathline' }, `${app.cfg.films}/${id}/${output}`));
 }
 function openExportSheet() {
   const R = 36, C = 2 * Math.PI * R;

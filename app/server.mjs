@@ -9,6 +9,7 @@ import { execFileSync } from 'child_process';
 import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
 import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog, runningJobs } from './lib/jobs.mjs';
+import { forPeople } from './lib/plain.mjs';
 import { startSync, syncNow, serveFromCloud } from './lib/storage.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
 import { studioVoiceList, isStudioVoice, STUDIO_VOICES, studioReady, speak } from './lib/voice.mjs';
@@ -17,10 +18,10 @@ import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, log
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
-import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf, takeFor } from './lib/productions.mjs';
+import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf, takeFor, MAX_SECONDS, tooLong, shotCost } from './lib/productions.mjs';
 import { talkingReady, talkingPrice } from './lib/video.mjs';
 import { soundReady } from './lib/sound.mjs';
-import { engines, ENGINES, lengthFor } from './lib/video.mjs';
+import { engines, ENGINES } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
 import { governApi, writeGate, GOVERNED } from './lib/govern.mjs';
 import { runAs, tag } from './lib/context.mjs';
@@ -106,14 +107,18 @@ function serveFile(req, res, root, rel) {
     // not on this disk: the Cloud Storage copy, if there is one
     if (e || !st.isFile()) return serveFromCloud(req, res, root, path.relative(root, p), type).then(ok => ok || send(res, 404, 'not found', 'text/plain'))
       .catch(err => { console.error('[storage]', err.message); if (!res.headersSent) send(res, 404, 'not found', 'text/plain'); });
+    // a file gone between the look and the read (a redrawn frame, a deleted take) ends the response, never the server
+    const stream = opts => fs.createReadStream(p, opts).on('error', () => res.destroy()).pipe(res);
     const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
     if (range) {
-      const a = range[1] ? +range[1] : 0, b = range[2] ? Math.min(+range[2], st.size - 1) : st.size - 1;
+      // "-n" is the last n bytes; a range outside the file is refused
+      const a = range[1] ? +range[1] : range[2] ? Math.max(0, st.size - +range[2]) : 0, b = range[1] && range[2] ? Math.min(+range[2], st.size - 1) : st.size - 1;
+      if (!(a <= b && a < st.size)) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }); return res.end(); }
       res.writeHead(206, { 'Content-Type': type, 'Content-Range': `bytes ${a}-${b}/${st.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': b - a + 1, 'Cache-Control': 'no-store' });
-      return fs.createReadStream(p, { start: a, end: b }).pipe(res);
+      return stream({ start: a, end: b });
     }
     res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
-    fs.createReadStream(p).pipe(res);
+    stream();
   });
 }
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
@@ -155,11 +160,15 @@ function saveContent(dir, script, template, brand, media) {
 
 const canDirect = user => MAX_DIRECTORS > 0 && (!authOn() || !DIRECTOR_USERS.length || DIRECTOR_USERS.includes(user.email));
 
+// whether the AI writer is installed: checked at most once a minute, since starting it holds up every other request
+let writer = null;
 function claudeStatus() {
-  try {
-    const v = execFileSync(process.env.CLAUDE_BIN || 'claude', ['--version'], { encoding: 'utf8', timeout: 8000 }).trim();
-    return { installed: true, version: v, apiKey: !!process.env.ANTHROPIC_API_KEY };
-  } catch { return { installed: false }; }
+  if (writer && Date.now() - writer.at < 60e3) return writer.status;
+  let status;
+  try { execFileSync(process.env.CLAUDE_BIN || 'claude', ['--version'], { encoding: 'utf8', timeout: 8000 }); status = { installed: true, apiKey: !!process.env.ANTHROPIC_API_KEY }; }
+  catch { status = { installed: false }; }
+  writer = { at: Date.now(), status };
+  return status;
 }
 
 function listFilms() {
@@ -168,11 +177,20 @@ function listFilms() {
     if (!meta) return null;
     const job = getJob(id);
     const status = job?.status === 'running' ? 'running' : meta.status === 'running' ? 'interrupted' : meta.status;
-    return { ...meta, status, step: job?.step, pct: job?.pct, poster: fs.existsSync(path.join(dir, 'poster.jpg')) ? 'poster.jpg' : null };
+    // a production's length (older ones kept it where a finished job now writes its running time)
+    const length = meta.mode === 'production' ? meta.length ?? readProduction(dir)?.seconds : meta.length;
+    // a cover frame since redrawn gives way to the storyboard's current first frame
+    const cover = meta.cover && !fs.existsSync(path.join(dir, meta.cover)) ? readProduction(dir)?.shots.find(s => s.board)?.board || null : meta.cover;
+    return { ...meta, ...(length ? { length } : {}), ...(meta.cover ? { cover } : {}), status, step: job?.step, pct: job?.pct, poster: fs.existsSync(path.join(dir, 'poster.jpg')) ? 'poster.jpg' : null };
   }).filter(Boolean).sort((a, b) => b.created.localeCompare(a.created));
 }
 
 // —— routes ——
+// paid background work (shoots, frames) one person can have running at once, across their productions
+const JOBS_PER_PERSON = Math.max(1, +process.env.JOBS_PER_PERSON || 2);
+const tooBusy = user => runningJobs().filter(j => j.graceful && j.owner === user?.email).length >= JOBS_PER_PERSON;
+const BUSY = `You already have ${JOBS_PER_PERSON} shoots or storyboards running. Start this one when one of them finishes.`;
+
 async function api(req, res, url, user) {
   const parts = url.pathname.split('/').filter(Boolean).slice(1);   // after /api
   const M = req.method;
@@ -194,7 +212,7 @@ async function api(req, res, url, user) {
     if (M === 'GET' && parts[1] === 'meta') {
       const v = await vertexStatus();
       return send(res, 200, { formats: Object.entries(FORMATS).map(([id, f]) => ({ id, name: f.name })), styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name, vertex: !!s.vertex })), vertex: { ok: v.ok }, engines: await engines(),
-        voices: studioReady() ? Object.entries(STUDIO_VOICES).map(([id, x]) => ({ id, name: x.name, tag: x.tag, who: x.who })) : [], talking: talkingReady(), talkPrice: talkingPrice(), sound: soundReady() });
+        voices: studioReady() ? Object.entries(STUDIO_VOICES).map(([id, x]) => ({ id, name: x.name, tag: x.tag, who: x.who })) : [], talking: talkingReady(), talkPrice: talkingPrice(), sound: soundReady(), maxSeconds: MAX_SECONDS });
     }
     if (M === 'POST' && !parts[1]) {
       const b = await body(req);
@@ -212,11 +230,11 @@ async function api(req, res, url, user) {
       });
       const brand = b.brandId ? readBrand(b.brandId) : null;
       const style = STYLES[b.style] && (!STYLES[b.style].vertex || (await vertexStatus()).ok) ? b.style : 'sketch';
-      let p = { brief: String(b.brief).slice(0, 4000), format: b.format, style, kind: KINDS.includes(b.kind) ? b.kind : 'ad', seconds: Math.max(10, Math.min(90, +b.seconds || 30)),
+      let p = { brief: String(b.brief).slice(0, 4000), format: b.format, style, kind: KINDS.includes(b.kind) ? b.kind : 'ad', seconds: Math.max(10, Math.min(MAX_SECONDS, +b.seconds || 30)),
         aspect: b.aspect === '9:16' ? '9:16' : '16:9', brandId: brand?.id || null, brand: brand ? { name: brand.name, tone: brand.tone } : null, notes: String(b.notes || '').slice(0, 4000),
         model: ['sonnet', 'opus', 'haiku'].includes(b.model) ? b.model : 'sonnet', media: copy(photos, 'media', 'product').map(src => ({ src })), refs: copy(looks, 'refs', 'reference'),
         concepts: [], concept: null, cast: [], locations: [], shots: [], cost: 0 };
-      writeMeta(dir, { id, mode: 'production', title: p.brief.split(/[.\n]/)[0].slice(0, 70), format: p.format, kind: p.kind, aspect: p.aspect, seconds: p.seconds, brandId: p.brandId, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'draft' });
+      writeMeta(dir, { id, mode: 'production', title: p.brief.split(/[.\n]/)[0].slice(0, 70), format: p.format, kind: p.kind, aspect: p.aspect, length: p.seconds, brandId: p.brandId, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'draft' });
       try { ({ p } = await writeConcepts(dir, p, { model: p.model })); } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); throw e; }
       saveProduction(dir, p);
       return send(res, 200, { id, meta: readMeta(dir), production: p, review: review(p) });
@@ -228,16 +246,16 @@ async function api(req, res, url, user) {
     // the storyboard is drawn in the background; the editor follows /api/films/<id>/events and refetches
     const drawAll = ids => {
       if (getJob(id)?.status === 'running') return false;
-      const job = startJob(id, dir, 'boards');
+      const job = Object.assign(startJob(id, dir, 'boards'), { graceful: true, owner: user.email });
       let done = 0;
       emit(job, { step: `Drawing ${ids.length} frames`, pct: 2 });
-      drawBoards(dir, ids, { model: p.model, onStep: step => emit(job, { step }), onShot: (sid, err) => emit(job, { pct: Math.round(100 * ++done / ids.length), step: `Drew ${done} of ${ids.length}` }, err ? `frame ${sid} failed: ${err.message}` : `frame ${sid}`) })
+      drawBoards(dir, ids, { model: p.model, stopped: () => job.cancelled, onStep: step => emit(job, { step }), onShot: (sid, err) => emit(job, { pct: Math.round(100 * ++done / ids.length), step: `Drew ${done} of ${ids.length}` }, err ? `frame ${sid} failed: ${forPeople(err, 'the frame couldn’t be drawn')}` : `frame ${sid}`) })
         .then(() => {
           const now = readProduction(dir), first = now.shots.find(s => s.board);
           writeMeta(dir, { ...readMeta(dir), cover: first?.board || null });
-          emit(job, { status: 'done', step: 'Storyboard ready', pct: 100 });
+          emit(job, job.cancelled ? { status: 'cancelled', step: 'Stopped' } : { status: 'done', step: 'Storyboard ready', pct: 100 });
         })
-        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
+        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: forPeople(e) }, 'Error: ' + e.message));
       return true;
     };
     if (M === 'GET' && !parts[2]) return send(res, 200, state());
@@ -292,11 +310,13 @@ async function api(req, res, url, user) {
       if (!(b.concept >= 0 && b.concept < p.concepts.length)) return send(res, 400, { error: 'Pick a concept.' });
       if (getJob(id)?.status === 'running') return send(res, 409, { error: 'The storyboard is still being drawn.' });
       if (limited(res, req, 'script', true)) return;
-      for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) fs.rmSync(path.join(dir, s.board), { force: true });
-      for (const c of p.cast) if (c.ref && /^cast\/[\w-]+\.png$/.test(c.ref)) fs.rmSync(path.join(dir, c.ref), { force: true });
-      for (const sub of ['takes', 'sound']) fs.rmSync(path.join(dir, sub), { recursive: true, force: true });
+      if (tooBusy(user)) return send(res, 429, { error: BUSY });
+      // the new shot list first; the old storyboard's frames, portraits and takes go only once it's written
+      const old = [...p.shots.map(s => s.board), ...p.cast.flatMap(c => [c.ref, c.sheet])].filter(f => /^(boards|cast)\/[\w-]+\.(svg|png)$/.test(f || ''));
       p.concept = b.concept;
       const { p: next } = await writeShots(dir, p, { model: p.model });
+      for (const f of old) fs.rmSync(path.join(dir, f), { force: true });
+      for (const sub of ['takes', 'sound']) fs.rmSync(path.join(dir, sub), { recursive: true, force: true });
       saveProduction(dir, next);
       writeMeta(dir, { ...readMeta(dir), title: next.title || readMeta(dir).title, cover: null });
       drawAll(next.shots.map(s => s.id));
@@ -305,6 +325,7 @@ async function api(req, res, url, user) {
     if (M === 'POST' && parts[2] === 'boards') {
       const b = await body(req), ids = Array.isArray(b.ids) && b.ids.length ? b.ids.filter(x => p.shots.some(s => s.id === x)) : p.shots.map(s => s.id);
       if (limited(res, req, 'script', true)) return;
+      if (getJob(id)?.status !== 'running' && tooBusy(user)) return send(res, 429, { error: BUSY });
       if (!drawAll(ids)) return send(res, 409, { error: 'The storyboard is already being drawn.' });
       return send(res, 200, state());
     }
@@ -327,43 +348,60 @@ async function api(req, res, url, user) {
       if (!ids.length) return send(res, 400, { error: 'No shot can be filmed yet: shots need an Illustrated or Cinematic frame (graphics stay as cards).' });
       if (limited(res, req, 'render')) return;
       if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Something is already running for this production.' });
-      const over = overCap(user, p.brandId, Math.max(1, Math.min(3, +b.takes || 1)) * ids.reduce((a, x) => a + lengthFor(engine, p.shots.find(s => s.id === x).dur) * ENGINES[engine].rate, 0));
+      const long = tooLong(p);
+      if (long) return send(res, 400, { error: long });
+      if (tooBusy(user)) return send(res, 429, { error: BUSY });
+      const takes = Math.max(1, Math.min(3, +b.takes || 1));
+      const over = overCap(user, p.brandId, takes * ids.reduce((a, x) => a + shotCost(p.shots.find(s => s.id === x), engine), 0));
       if (over) return send(res, 402, { error: over });
-      const takes = Math.max(1, Math.min(3, +b.takes || 1)), total = ids.length * takes, job = startJob(id, dir, 'shoot');
+      const total = ids.length * takes, job = Object.assign(startJob(id, dir, 'shoot'), { graceful: true, owner: user.email });
       let done = 0;
       emit(job, { step: `Shooting ${total} take${total > 1 ? 's' : ''}`, pct: 2 });
-      shootShots(dir, ids, { engine, takes, onStep: step => emit(job, { step }), onTake: (sid, err) => emit(job, { pct: Math.round(100 * ++done / total), step: `Shot ${done} of ${total}` }, err ? `take for ${sid} failed: ${err.message}` : `take ${sid}`) })
-        .then(() => emit(job, { status: 'done', step: 'Takes ready', pct: 100 }))
-        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
+      shootShots(dir, ids, { engine, takes, stopped: () => job.cancelled, onStep: step => emit(job, { step }), onTake: (sid, err) => emit(job, { pct: Math.round(100 * ++done / total), step: `Shot ${done} of ${total}` }, err ? `take for ${sid} failed: ${forPeople(err, 'the video service couldn’t make it')}` : `take ${sid}`) })
+        .then(() => emit(job, job.cancelled ? { status: 'cancelled', step: 'Stopped' } : { status: 'done', step: 'Takes ready', pct: 100 }))
+        .catch(e => emit(job, { status: 'failed', step: 'Failed', error: forPeople(e) }, 'Error: ' + e.message));
       return send(res, 200, state());
     }
     // the rough cut: the chosen takes (and the frames of shots not filmed) as a film to review and export in Create
     if (M === 'POST' && parts[2] === 'cut') {
       if (!p.shots.some(s => s.take)) return send(res, 400, { error: 'Shoot at least one shot first.' });
       if (getJob(id)?.status === 'running') return send(res, 409, { error: 'Something is already running for this production.' });
+      const long = tooLong(p);
+      if (long) return send(res, 400, { error: long });
       const b = await body(req), brand = p.brandId ? readBrand(p.brandId) : null;
-      // the voices, each take's sound and the score, made (or found) in the production, then copied with the takes
-      const { score } = await soundForCut(dir).catch(e => { console.error('cut sound:', e.detail || e.message); return { score: null }; });
-      const q = readProduction(dir);
-      const narrator = isStudioVoice(q.narrator) && studioReady() ? q.narrator : null;
-      const film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Cut: ${p.title || p.brief.slice(0, 60)}`, voice: narrator || b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
-      const carry = rel => {
-        if (!rel || !/^(voicecache|sound|score)\/[\w-]+\.wav$/.test(rel) || !fs.existsSync(path.join(dir, rel))) return;
-        fs.mkdirSync(path.join(film.dir, path.dirname(rel)), { recursive: true });
-        fs.copyFileSync(path.join(dir, rel), path.join(film.dir, rel));
-      };
-      for (const s of q.shots) { carry(s.line?.file); carry(takeFor(s)?.sound); }
-      carry(score);
-      for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
-        fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
-        fs.copyFileSync(path.join(dir, s.board), path.join(film.dir, s.board));
+      // a job while it cuts, so a second click is refused and a deploy waits for it; a cut that fails leaves no half-made film
+      const job = Object.assign(startJob(id, dir, 'cut'), { graceful: true, owner: user.email });
+      let film = null;
+      try {
+        emit(job, { step: 'Cutting the film', pct: 5 });
+        // the voices, each take's sound and the score, made (or found) in the production, then copied with the takes
+        const { score } = await soundForCut(dir).catch(e => { console.error('cut sound:', e.detail || e.message); return { score: null }; });
+        const q = readProduction(dir);
+        const narrator = isStudioVoice(q.narrator) && studioReady() ? q.narrator : null;
+        film = createQuickFilm({ template: 'animatic', aspect: p.aspect, prompt: `Cut: ${p.title || p.brief.slice(0, 60)}`, voice: narrator || b.voice || brand?.voice || 'af_heart', narration: true, model: null, brandId: p.brandId, owner: user, kind: p.kind });
+        const carry = rel => {
+          if (!rel || !/^(voicecache|sound|score)\/[\w-]+\.wav$/.test(rel) || !fs.existsSync(path.join(dir, rel))) return;
+          fs.mkdirSync(path.join(film.dir, path.dirname(rel)), { recursive: true });
+          fs.copyFileSync(path.join(dir, rel), path.join(film.dir, rel));
+        };
+        for (const s of q.shots) { carry(s.line?.file); carry(takeFor(s)?.sound); }
+        carry(score);
+        for (const s of p.shots) if (s.board && /^boards\/[\w-]+\.(svg|png)$/.test(s.board)) {
+          fs.mkdirSync(path.join(film.dir, 'boards'), { recursive: true });
+          fs.copyFileSync(path.join(dir, s.board), path.join(film.dir, s.board));
+        }
+        if (p.media?.length) fs.cpSync(path.join(dir, 'media'), path.join(film.dir, 'media'), { recursive: true });
+        const clips = await clipsInto(dir, q, film.dir);
+        saveContent(film.dir, animaticScript(q, clips, { score }), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
+        writeMeta(film.dir, { ...readMeta(film.dir), production: id });
+        writeMeta(dir, { ...readMeta(dir), cut: film.id });
+        emit(job, { status: 'done', step: 'Cut ready', pct: 100 });
+        return send(res, 200, { id: film.id });
+      } catch (e) {
+        if (film?.dir) fs.rmSync(film.dir, { recursive: true, force: true });
+        emit(job, { status: 'failed', step: 'Failed', error: 'The cut couldn’t be made. Try again.' }, 'Error: ' + (e.detail || e.message));
+        throw e;
       }
-      if (p.media?.length) fs.cpSync(path.join(dir, 'media'), path.join(film.dir, 'media'), { recursive: true });
-      const clips = await clipsInto(dir, q, film.dir);
-      saveContent(film.dir, animaticScript(q, clips, { score }), 'animatic', p.brandId ? (await brandIntoFilm(p.brandId, film.dir)).page : null, p.media?.length ? p.media : undefined);
-      writeMeta(film.dir, { ...readMeta(film.dir), production: id });
-      writeMeta(dir, { ...readMeta(dir), cut: film.id });
-      return send(res, 200, { id: film.id });
     }
     // hear a studio voice: a character's first line (or a short hello), recorded once and kept
     if (M === 'POST' && parts[2] === 'voice-sample') {
@@ -419,7 +457,7 @@ async function api(req, res, url, user) {
     } else {
       if (!String(b.prompt || '').trim()) return send(res, 400, { error: 'Write a prompt first.' });
       const brand = b.brandId ? readBrand(b.brandId) : null;
-      const r = await writeScript({ prompt: b.prompt, template: b.template, seconds: +b.seconds || 30, aspect: b.aspect, narration: b.narration !== false, model: b.model || 'sonnet', brand,
+      const r = await writeScript({ prompt: b.prompt, template: b.template, seconds: Math.max(10, Math.min(MAX_SECONDS, +b.seconds || 30)), aspect: b.aspect, narration: b.narration !== false, model: b.model || 'sonnet', brand,
         kind: b.kind, media: photos, refs: uploaded(b.refs), notes: String(b.notes || '').slice(0, 4000) });
       script = r.script;
       info = { cost: r.cost, ms: r.ms };
@@ -451,12 +489,12 @@ async function api(req, res, url, user) {
     const id = `d-${stamp()}-${style.slug}`.slice(0, 60);
     const dir = filmDir(id);
     fs.mkdirSync(dir, { recursive: true });
-    const meta = { id, mode: 'director', style: style.slug, title: `${style.name}: ${String(b.prompt).slice(0, 60)}`, aspect: b.aspect, prompt: b.prompt, notes: b.notes, model: b.model || 'opus', seconds: undefined, length: +b.seconds || 45, brandId: b.brandId || null, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'running' };
+    const meta = { id, mode: 'director', style: style.slug, title: `${style.name}: ${String(b.prompt).slice(0, 60)}`, aspect: b.aspect, prompt: b.prompt, notes: b.notes, model: b.model || 'opus', seconds: undefined, length: Math.max(15, Math.min(MAX_SECONDS, +b.seconds || 45)), brandId: b.brandId || null, owner: user.email, ownerName: user.name, created: new Date().toISOString(), status: 'running' };
     const brand = b.brandId ? (await brandIntoFilm(b.brandId, dir)).brand : null;
     writeMeta(dir, meta);
     const job = startJob(id, dir, 'director');
-    runDirector(job, { prompt: b.prompt, style: `${style.name} (styles/${style.slug})`, seconds: +b.seconds || 45, aspect: b.aspect, notes: b.notes, model: meta.model, brand })
-      .catch(e => emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + e.message));
+    runDirector(job, { prompt: b.prompt, style: `${style.name} (styles/${style.slug})`, seconds: meta.length, aspect: b.aspect, notes: b.notes, model: meta.model, brand })
+      .catch(e => emit(job, { status: 'failed', step: 'Failed', error: forPeople(e) }, 'Error: ' + e.message));
     return send(res, 200, { id, meta });
   }
 
@@ -695,7 +733,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/core/') || p.startsWith('/node_modules/')) return serveFile(req, res, LIB, p.slice(1));
     return serveFile(req, res, path.join(APP, 'public'), p === '/' ? 'index.html' : p.slice(1));
   } catch (e) {
-    if (!res.headersSent) send(res, [400, 403, 404, 429].includes(e.code) ? e.code : 500, { error: String(e.message || e) });
+    if (!res.headersSent) send(res, [400, 402, 403, 404, 409, 429].includes(e.code) ? e.code : 500, { error: forPeople(e) });
   }
 });
 server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));

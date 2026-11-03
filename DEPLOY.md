@@ -91,7 +91,9 @@ nano .env                                                        # fill in every
 | `OPEN_ACCESS` | `1` for the open site |
 | `ANTHROPIC_API_KEY` | The Claude API key |
 | `LIMIT_*_PER_HOUR` | The open site's hourly limits |
-| `RENDER_SLOTS` | Concurrent full-film renders (each uses 4 browser workers) |
+| `RENDER_SLOTS` | Concurrent full-film renders (each uses 4 browser workers); the rest queue (2) |
+| `VIDEO_SLOTS` | Paid video requests at once across everyone; the rest queue (6) |
+| `JOBS_PER_PERSON` | Shoots and storyboards one person can have running at once (2) |
 
 ### 2. Run
 
@@ -124,6 +126,8 @@ The same key turns on the rest of the studio:
 | The score | an original instrumental the length of the cut | ElevenLabs Music | $0.60 a minute |
 
 Every take is also checked against the cast's portraits and the product photo (a Gemini Flash model on Vertex AI, under a cent a take), and the result shows as a dot on the take. **Make the cut** puts the chosen takes on the timeline with the voices, each shot's sound and the score, and opens it in Create. Without the key, films use the offline voice and the built-in score.
+
+Films run up to **60 seconds** (15, 30, 45 or 60): the length of a paid social ad or a reel, and the most a cast stays consistent across shots at a sensible cost and wait (a full 60-second shoot with the Character engine is about $8 a take). The writer plans within the length, and a production that runs over can't be shot or cut until it's shortened. **Stop** on a production lets the takes already under way finish (they're paid for) and starts no more.
 
 ## Google sign-in, CarePlix only
 

@@ -28,6 +28,16 @@ export async function engines() {
 export const lengthFor = (engine, seconds) => ENGINES[engine].durations.find(d => d >= seconds) || ENGINES[engine].durations.at(-1);
 
 const wait = ms => new Promise(res => setTimeout(res, ms));
+// paid video requests at once, across everyone: past the services' own limits more only fail as busy, so the rest queue
+const SLOTS = Math.max(1, +process.env.VIDEO_SLOTS || 6);
+let inUse = 0;
+const waiting = [];
+async function slot(fn) {
+  if (inUse < SLOTS) inUse++;
+  else await new Promise(res => waiting.push(res));
+  try { return await fn(); }
+  finally { const next = waiting.shift(); if (next) next(); else inUse--; }
+}
 const busy = (status, detail) => Object.assign(new Error(status === 429 ? 'The video service is busy. Try this shot again in a minute.' : `The video service couldn’t make this shot (${status}).`), { code: status, detail });
 
 // One clip: { engine, image: { data: Buffer, mime }, prompt, seconds, aspect, elements } → { mp4: Buffer, seconds, cost }
@@ -37,7 +47,7 @@ export async function shootClip({ engine, image, prompt, seconds, aspect = '16:9
   const e = ENGINES[engine];
   if (!e) throw new Error('Unknown video engine.');
   const len = lengthFor(engine, seconds);
-  const mp4 = e.provider === 'veo' ? await veo(e.model, { image, prompt, len, aspect }) : await kling(e.model, { image, prompt, len, elements });
+  const mp4 = await slot(() => (e.provider === 'veo' ? veo(e.model, { image, prompt, len, aspect }) : kling(e.model, { image, prompt, len, elements })));
   return billed('video', { mp4, seconds: len, cost: len * e.rate }, { engine: e.name });
 }
 
@@ -55,7 +65,8 @@ export const talkingReady = () => falReady();
 export const talkingPrice = () => ({ rate: TALKERS[0].rate, min: TALKERS[0].minAudio || 0 });
 const sh = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, { timeout: 180000 }, (e, out) => (e ? rej(e) : res(String(out).trim()))));
 // { image: { data, mime }, audio: { data (a WAV), mime }, prompt } → { mp4 (with the line as its sound), seconds, cost }
-export async function performClip({ image, audio, prompt }) {
+export const performClip = args => slot(() => perform(args));
+async function perform({ image, audio, prompt }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'talk-'));
   try {
     const line = path.join(tmp, 'line.wav');

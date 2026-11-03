@@ -8,6 +8,7 @@ import { emit } from './jobs.mjs';
 import { LIB, APP } from './paths.mjs';
 import { STUDIO_VOICES, isStudioVoice, studioReady, speak } from './voice.mjs';
 import { VOICES } from './templates.mjs';
+import { forPeople } from './plain.mjs';
 
 const PY = path.join(LIB, '.venv', 'bin', 'python');
 
@@ -42,12 +43,28 @@ const srtTime = t => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
 };
 
+// full-film renders at once, across everyone (each runs 4 browser workers); the rest wait their turn
+const SLOTS = Math.max(1, +process.env.RENDER_SLOTS || 2);
+let rendering = 0;
+const queued = [];
+
 export async function renderQuick(job, meta) {
+  if (rendering < SLOTS) rendering++;
+  else {
+    emit(job, { step: 'Waiting for a free render slot', pct: 1 });
+    await new Promise(res => queued.push(res));
+  }
+  try { await render(job, meta); }
+  finally { const next = queued.shift(); if (next) next(); else rendering--; }
+}
+
+async function render(job, meta) {
   const dir = job.dir, size = meta.size, cf = path.join(dir, 'content.json');
-  const content = JSON.parse(fs.readFileSync(cf, 'utf8'));
-  const slug = (content.title || 'film').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'film';
-  const outFile = path.join(dir, `${slug}.mp4`);
   try {
+    if (job.cancelled) throw new Error('cancelled');
+    const content = JSON.parse(fs.readFileSync(cf, 'utf8'));
+    const slug = (content.title || 'film').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'film';
+    const outFile = path.join(dir, `${slug}.mp4`);
     // 1. narration: one WAV per scene, then the real durations go back into content.json so the timeline fits the voice.
     // A scene's own voice (a character's line in a cut from a production) wins over the film's narrator.
     delete content.voice;
@@ -120,6 +137,6 @@ export async function renderQuick(job, meta) {
     emit(job, { status: 'done', step: 'Done', pct: 100, output: path.basename(outFile) }, `Finished: ${outFile}`);
   } catch (e) {
     if (job.cancelled) return;
-    emit(job, { status: 'failed', step: 'Failed', error: String(e.message || e) }, 'Error: ' + (e.message || e));
+    emit(job, { status: 'failed', step: 'Failed', error: forPeople(e, 'The export couldn’t be finished. Try again; if it fails again, tell the studio team.') }, 'Error: ' + (e.message || e));
   }
 }

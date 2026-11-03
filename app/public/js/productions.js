@@ -21,16 +21,22 @@ const brief = { brief: '', format: 'brand', kind: 'ad', seconds: '30', aspect: '
 let root, P = null, events = null, saveTimer = 0, META = null;
 // shooting: the video engine and takes per shot (engines are listed by the server, by plain name)
 const SHOOT = { engine: null, takes: 1 };
+let headCost = null;   // the storyboard header's shooting cost, kept current by the shoot bar
 const shootable = s => s.engine !== 'code' && /\.png$/.test(s.board || '');
 const lengthFor = (e, d) => e.durations.find(x => x >= d) || e.durations.at(-1);
 // where a line sits in its shot (as lib/productions.mjs LEAD and TAIL)
-const LEAD = 0.35, TAIL = 0.75;
-const lineSecs = s => (s.line ? s.line.dur : String(s.vo || '').trim().split(/\s+/).filter(Boolean).length / 2.6);
+const LEAD = Math.round(0.35 * 24) / 24, TAIL = 0.75;
+const lineSecs = s => { const vo = String(s.vo || '').trim(); return !vo ? 0 : s.line?.text === vo ? s.line.dur : vo.split(/\s+/).length / 2.6; };
+const needs = s => Math.max(+s.dur || 2.5, 0.8, lineSecs(s) ? LEAD + lineSecs(s) + TAIL : 0);
+// how long the film runs (as lib/productions.mjs cutLength): each shot as long as it, its line or its talking take
+const chosen = s => (s.take && s.takes?.find(t => t.id === s.take)) || null;
+const filmLength = p => p.shots.reduce((t, s) => t + Math.max(needs(s), chosen(s)?.engine === 'talking' ? chosen(s).seconds : 0), 0);
+const tooLong = p => filmLength(p) > (META.maxSeconds || 60) + 0.05;
 // presenter shots with a line are performed by a talking character when the server can (priced by the line's length,
 // at the server's price and minimum)
 const performed = s => s.engine === 'presenter' && META.talking && !!String(s.vo || '').trim();
 const talkCost = s => Math.max(LEAD + lineSecs(s) + TAIL, META.talkPrice.min) * META.talkPrice.rate;
-const estimate = (shots, e, takes) => shots.reduce((t, s) => t + (performed(s) ? talkCost(s) : lengthFor(e, Math.max(+s.dur || 3, s.vo ? LEAD + lineSecs(s) + TAIL : 0)) * e.rate) * takes, 0);
+const estimate = (shots, e, takes) => shots.reduce((t, s) => t + (s.engine === 'code' ? 0 : performed(s) ? talkCost(s) : lengthFor(e, Math.max(+s.dur || 3, needs(s))) * e.rate) * takes, 0);
 // frame styles this server can make: Sketch always; Illustrated and Cinematic when Vertex AI is reachable
 const meta = async () => META || (META = await api('productions/meta').catch(() => ({ styles: [{ id: 'sketch', name: 'Sketch' }], vertex: { ok: false } })));
 const styles = () => META.styles.filter(s => !s.vertex || META.vertex.ok);
@@ -82,7 +88,7 @@ async function home() {
 }
 const card = f => h('a', { class: 'prod-card', href: '#productions/' + f.id },
   h('div', { class: 'sb-frame' + (f.aspect === '9:16' ? ' tall' : '') }, f.cover ? h('img', { src: `/films/${f.id}/${f.cover}`, alt: '' }) : h('span', { class: 'faint' }, 'Concepts')),
-  h('b', {}, f.title || 'Untitled'), h('small', { class: 'faint' }, `${FORMATS.find(x => x[0] === f.format)?.[1] || ''} · ${f.seconds || ''} s · ${f.aspect}`));
+  h('b', {}, f.title || 'Untitled'), h('small', { class: 'faint' }, `${FORMATS.find(x => x[0] === f.format)?.[1] || ''} · ${f.length ? f.length + ' s · ' : ''}${f.aspect}`));
 
 // a waiting screen with lines that change while Claude works
 function working(lines, sub) {
@@ -155,7 +161,7 @@ function concepts() {
       h('p', { class: 'why' }, h('b', {}, 'Why it works  '), c.why),
       /^none\.?$/i.test(c.watchouts.trim()) ? null : h('p', { class: 'watch' }, icon('shield', 13), c.watchouts),
       h('button', { class: 'btn primary', onclick: () => boardIt(i) }, icon('grid', 14), 'Storyboard this')))));
-  if (p.shots.length && P.was != null) wrap.prepend(h('p', { class: 'faint' }, 'Picking a concept replaces the current storyboard. ', h('a', { href: '#', onclick: e => { e.preventDefault(); p.concept = P.was; render(); } }, 'Back to the storyboard')));
+  if (p.shots.length && P.was != null) wrap.prepend(h('p', { class: 'faint' }, (p.shots.some(s => s.takes?.length) ? 'Picking a concept replaces the current storyboard, its cast and every take you’ve shot. ' : 'Picking a concept replaces the current storyboard. '), h('a', { href: '#', onclick: e => { e.preventDefault(); p.concept = P.was; render(); } }, 'Back to the storyboard')));
   return wrap;
 }
 async function more() {
@@ -180,16 +186,20 @@ function board() {
   const p = P.production, rv = P.review, running = P.job?.status === 'running';
   const c = p.concepts[p.concept];
   const warn = Object.fromEntries((rv.shots || []).map(s => [s.id, s.unsupported]));
+  const long = tooLong(p), max = META.maxSeconds || 60;
+  headCost = h('span', {});
   const head = h('div', { class: 'board-head' },
     h('div', {}, h('div', { class: 'eyebrow' }, 'Step 3 · Storyboard'), h('h2', { class: 'title-m' }, c?.name || 'Storyboard'),
       h('p', { class: 'muted' }, c?.logline || ''),
-      h('p', { class: 'faint' }, `${p.shots.length} shots · ${rv.total.toFixed(1)} s · shooting estimate about $${Math.round(rv.shoot)} · spent so far $${(p.cost || 0).toFixed(2)}`)),
+      h('p', { class: 'faint' }, `${p.shots.length} shots · ${filmLength(p).toFixed(1)} of ${max} s`, META.engines?.length ? [' · ', headCost] : null, ` · spent so far $${(p.cost || 0).toFixed(2)}`),
+      long ? h('p', { class: 'length-warn' }, icon('info', 12), `Runs over ${max} seconds, the longest film the studio makes. Shorten a few lines or shots to shoot and cut it.`) : null),
     h('div', { class: 'actions' },
       styles().length > 1 ? segmented(styles().map(s => ({ v: s.id, label: s.name, title: s.vertex ? 'Generated images, about $0.07 a frame' : 'Quick pencil-style sketches, free' })), p.style || 'sketch', restyle, { label: 'Frame style' }) : null,
       h('button', { class: 'btn ghost', onclick: () => { P.was = p.concept; p.concept = null; render(); } }, 'Change concept'),
       h('button', { class: 'btn', disabled: running, onclick: redrawAll }, icon('brush', 14), running ? (P.job.step || 'Drawing…') : 'Redraw all'),
+      running ? h('button', { class: 'btn ghost', onclick: stopJob, title: 'Takes and frames already under way finish (they’re paid for); no new ones start' }, icon('stop', 14), 'Stop') : null,
       h('button', { class: 'btn', disabled: running || !p.shots.some(s => s.board), onclick: animatic }, icon('film', 15), P.meta.animatic ? 'New animatic' : 'Make the animatic'),
-      h('button', { class: 'btn primary', disabled: running || !p.shots.some(s => s.take), onclick: cut, title: META.sound ? 'The chosen takes, cut together with the voices, each shot’s sound and a composed score' : 'The chosen takes, cut together with the voice-over and music' }, icon('clapper', 15), P.meta.cut ? 'New cut' : 'Make the cut')));
+      h('button', { class: 'btn primary', disabled: running || long || !p.shots.some(s => s.take), onclick: cut, title: META.sound ? 'The chosen takes, cut together with the voices, each shot’s sound and a composed score' : 'The chosen takes, cut together with the voice-over and music' }, icon('clapper', 15), P.meta.cut ? 'New cut' : 'Make the cut')));
   const grid = h('div', { class: 'board-grid' + (p.aspect === '9:16' ? ' tall' : '') }, p.shots.map((s, i) => shotCard(s, i, running, warn[s.id] || [])));
   return h('div', { class: 'prod-body' }, head, shootBar(running), castPanel(), grid,
     P.meta.cut || P.meta.animatic ? h('p', { class: 'faint' }, ...(P.meta.cut ? ['Latest cut: ', h('a', { href: '#create/' + P.meta.cut }, 'open it in Create'), '. '] : []), ...(P.meta.animatic ? ['Latest animatic: ', h('a', { href: '#create/' + P.meta.animatic }, 'open it in Create'), '.'] : [])) : null);
@@ -201,7 +211,12 @@ function shootBar(running) {
   if (!list.some(e => e.id === SHOOT.engine)) SHOOT.engine = list[0].id;
   const e = list.find(x => x.id === SHOOT.engine), ready = p.shots.filter(shootable);
   const cost = h('span', { class: 'faint' });
-  const paint = () => { const en = list.find(x => x.id === SHOOT.engine); cost.textContent = ready.length ? `${ready.length} shot${ready.length > 1 ? 's' : ''} · about $${estimate(ready, en, SHOOT.takes).toFixed(2)}` : 'No shots ready: switch the frames to Illustrated or Cinematic first.'; };
+  // this bar's cost (the shots with frames ready) and the header's (every shot filmed), both with the engine picked here
+  const paint = () => {
+    const en = list.find(x => x.id === SHOOT.engine);
+    cost.textContent = ready.length ? `${ready.length} shot${ready.length > 1 ? 's' : ''} · about $${estimate(ready, en, SHOOT.takes).toFixed(2)}` : 'No shots ready: switch the frames to Illustrated or Cinematic first.';
+    if (headCost) headCost.textContent = `about $${estimate(p.shots, en, SHOOT.takes).toFixed(2)} to film every shot with ${en.name}`;
+  };
   paint();
   return h('div', { class: 'shoot-bar' },
     h('div', {}, h('div', { class: 'eyebrow' }, 'Step 4 · Shoot'), h('b', {}, 'Turn the frames into video')),
@@ -209,7 +224,7 @@ function shootBar(running) {
     pillSelect([[1, '1 take'], [2, '2 takes'], [3, '3 takes']], SHOOT.takes, v => { SHOOT.takes = +v; paint(); }, 'Takes per shot'),
     cost,
     h('span', { class: 'spacer' }),
-    h('button', { class: 'btn primary', disabled: running || !ready.length, onclick: () => shoot(ready.map(s => s.id)) }, icon('film', 15), running ? (P.job.step || 'Working…') : 'Shoot all'),
+    h('button', { class: 'btn primary', disabled: running || !ready.length || tooLong(p), onclick: () => shoot(ready.map(s => s.id)) }, icon('film', 15), running ? (P.job.step || 'Working…') : 'Shoot all'),
     META.talking && ready.some(performed) ? h('p', { class: 'faint shoot-note' }, icon('wave', 12), 'Presenter shots are performed by their character, speaking the line in their own voice.') : null);
 }
 async function shoot(ids) {
@@ -378,7 +393,13 @@ function follow() {
     pending = setTimeout(() => refresh().catch(() => {}), 150);
     if (d.status !== 'running') { stopEvents(); if (d.status === 'failed') toast(d.error || 'Drawing failed', 'error'); }
   };
-  events.onerror = () => { stopEvents(); refresh().catch(() => {}); };
+  // a dropped connection (a proxy closing a quiet stream, say) reconnects while the work runs
+  events.onerror = () => { stopEvents(); refresh().then(() => { if (P.job?.status === 'running') setTimeout(follow, 2000); }).catch(() => {}); };
+}
+async function stopJob(e) {
+  e.currentTarget.disabled = true;
+  try { await api(`films/${P.id}/cancel`, { method: 'POST' }); toast('Stopping. Work already under way finishes first.', 'ok'); }
+  catch (err) { toast(err.message, 'error'); }
 }
 function stopEvents() { if (events) { events.close(); events = null; } }
 

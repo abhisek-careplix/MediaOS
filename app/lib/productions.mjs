@@ -16,11 +16,13 @@ import { askJSON, KIND } from './claude.mjs';
 import { generateImage } from './vertex.mjs';
 import { readBrand } from './brands.mjs';
 import { execFile } from 'child_process';
-import { shootClip, performClip, talkingReady, lengthFor, ENGINES as VIDEO } from './video.mjs';
+import { shootClip, performClip, talkingReady, talkingPrice, lengthFor, ENGINES as VIDEO } from './video.mjs';
 import { STUDIO_VOICES, studioReady, speak, padded } from './voice.mjs';
 import { soundReady, ambienceFor, composeScore } from './sound.mjs';
 import { lookAt, vertexStatus, MAX_REFS } from './vertex.mjs';
 import { proofForPrompt, unsupportedNumbers, listProof } from './proof.mjs';
+import { forPeople } from './plain.mjs';
+import { writeJSON } from './jobs.mjs';
 
 // what each format asks of the writing and the boards
 export const FORMATS = {
@@ -40,14 +42,15 @@ const drop = (dir, f) => { if (f && FRAME.test(f)) fs.rmSync(path.join(dir, f), 
 const SIZES = ['Extreme wide', 'Wide', 'Medium', 'Medium close-up', 'Close-up', 'Extreme close-up', 'Insert', 'Over the shoulder', 'POV', 'Two shot'];
 const MOVES = ['Static', 'Push in', 'Pull out', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Tracking', 'Handheld', 'Orbit', 'Crane up'];
 const ENGINES = ['video', 'presenter', 'code', 'product'];
-// rough generation cost per second of finished shot, three takes each (third-party rates; refined once providers are connected)
-const RATE = { video: 0.25 * 3, presenter: 0.07 * 2, code: 0, product: 0.25 * 2 };
+// the longest film the studio makes, in seconds: the length of a paid social ad or a reel, and past it the cost, the wait
+// and keeping one cast looking the same all grow with every shot
+export const MAX_SECONDS = 60;
 
 const str = { type: 'string' };
 const read = dir => JSON.parse(fs.readFileSync(path.join(dir, 'production.json'), 'utf8'));
 export const readProduction = dir => { try { return read(dir); } catch { return null; } };
 export function saveProduction(dir, p) {
-  fs.writeFileSync(path.join(dir, 'production.json'), JSON.stringify(p, null, 1));
+  writeJSON(path.join(dir, 'production.json'), p);
   return p;
 }
 // the photos Claude may look at: product photos in media/, references in refs/
@@ -125,12 +128,12 @@ Now plan the production as its director.
 - narrator: the voice for the voice-over${voices ? `, from the studio's voices: ${Object.entries(STUDIO_VOICES).map(([id, v]) => `${id} (${v.who})`).join('; ')}` : ''}. Match the brand and the audience (US-first).
 - cast: every recurring character once, invented people (or creatures) only: id (c1, c2…), name, look (age range, build, skin tone, hair, face, distinctive features — specific enough to draw the same person in every frame), wardrobe, voice (how they sound), voiceId (${voices ? 'the studio voice that fits them best, from the same list; two characters never share one, nor share the narrator\'s' : 'leave empty'}). A mascot gets an exact design: silhouette, colours, features.
 - locations: id (l1, l2…), name, look (time of day, light, palette, key set pieces).
-- shots: about ${n} shots whose durations add up to about ${p.seconds} seconds. For each: size, angle (a few words), move, dur (seconds), engine, action (what we see, one or two concrete sentences a storyboard artist can draw), vo (the spoken line during this shot, or "" — narration or the presenter's words), speaker ("narrator" for voice-over, or the cast id of the character who says the line), delivery (how the line is said, as a director would tell a voice actor, a few words: e.g. "conversational, a little hushed, like sharing a tip with a friend" or "brightly, with a smile"; "" when there's no line), ambience (what we hear besides the voice and the music, in a few words a sound designer can use: the room tone and any foley, e.g. "quiet open-plan office, distant keyboard taps, a phone set down on a ledge"; "" for graphics), super (short on-screen text, or ""), cast (ids in frame), location (id, or ""), product (${photos ? `which product photo is visible, 0-${photos - 1}, or -1` : '-1: there are no product photos'}), proof (ids of the Proof Library entries any claim in vo or super relies on).
+- shots: about ${n} shots whose durations add up to ${p.seconds} seconds at most (never more: the film can't run longer). For each: size, angle (a few words), move, dur (seconds), engine, action (what we see, one or two concrete sentences a storyboard artist can draw), vo (the spoken line during this shot, or "" — narration or the presenter's words), speaker ("narrator" for voice-over, or the cast id of the character who says the line), delivery (how the line is said, as a director would tell a voice actor, a few words: e.g. "conversational, a little hushed, like sharing a tip with a friend" or "brightly, with a smile"; "" when there's no line), ambience (what we hear besides the voice and the music, in a few words a sound designer can use: the room tone and any foley, e.g. "quiet open-plan office, distant keyboard taps, a phone set down on a ledge"; "" for graphics), super (short on-screen text, or ""), cast (ids in frame), location (id, or ""), product (${photos ? `which product photo is visible, 0-${photos - 1}, or -1` : '-1: there are no product photos'}), proof (ids of the Proof Library entries any claim in vo or super relies on).
 - engine: "video" for a filmed or animated scene (generated later), "presenter" for a character speaking their line on camera (they are in the shot's cast and are its speaker; their lips are synced to the line; they face the camera, or nearly, for the whole line, in a medium or closer framing, and the action is small: a gesture, a glance, holding the product; never walking away or turning their back while they speak), "code" for motion graphics (text, data, UI, logo, end card), "product" for a real product photo or app screen as the hero.
 - A line a character says on camera is a "presenter" shot; in a "video" shot the line is heard over the picture (voice-over, or a character off screen), so nobody in it should visibly be talking.
 - speaker: a line in a character's own words (first person, their story) is theirs on every shot, cutaways included: in a creator reel the creator's voice carries over the product shots. "narrator" is only for a separate announcer voice.
 - Open on the concept's hook. End on a "code" end card with the brand and the call to action.
-- Spoken lines: about 2.4 words per second of their shot at most; natural spoken English.
+- Spoken lines: a line needs about a second of air in its shot, so at most 2.4 words for each second of the shot after the first (a 4-second shot holds about 7 words); natural spoken English.
 Plain text only: no markdown, no emoji.`;
   const r = await askJSON(prompt, schema, { model, timeout: 400000, files: filesOf(dir, p) });
   const d = r.data;
@@ -139,8 +142,19 @@ Plain text only: no markdown, no emoji.`;
   const ids = new Set(p.cast.map(c => c.id));
   p.shots = d.shots.map((s, i) => ({ id: 's' + (i + 1) + '-' + Math.random().toString(36).slice(2, 5), ...s, speaker: ids.has(s.speaker) ? s.speaker : 'narrator',
     product: s.product >= 0 && s.product < photos ? s.product : -1, board: null, box: null }));
+  fitLength(p);
   p.cost = (p.cost || 0) + (r.cost || 0);
   return { p, cost: r.cost };
+}
+
+// a written shot list made to fit its length: every shot as long as its line needs, then the time a shot has beyond
+// that (never below 1.5 s) trimmed evenly until the film fits. Lines too long to fit are left for the editor to flag.
+function fitLength(p) {
+  const target = Math.min(p.seconds || MAX_SECONDS, MAX_SECONDS);
+  for (const s of p.shots) s.dur = Math.ceil(needs(s) * 10) / 10;
+  const slack = p.shots.map(s => Math.max(0, s.dur - Math.max(1.5, lineSecs(s) ? LEAD + lineSecs(s) + TAIL : 0)));
+  const over = p.shots.reduce((t, s) => t + s.dur, 0) - target, room = slack.reduce((a, b) => a + b, 0);
+  if (over > 0 && room > 0) p.shots.forEach((s, i) => { s.dur = Math.max(0.8, Math.floor((s.dur - slack[i] * Math.min(1, over / room)) * 10) / 10); });
 }
 
 // —— 3. a storyboard frame ——
@@ -168,7 +182,7 @@ export async function drawBoard(dir, p, shot, opts = {}) {
   try { return { ...(await drawFrame(dir, p, shot, opts)), fallback: null }; }
   catch (e) {
     if (e.code === 429 || e.code >= 500) throw e;
-    return { ...(await drawSketch(dir, p, shot, opts)), fallback: String(e.message || e).slice(0, 200) };
+    return { ...(await drawSketch(dir, p, shot, opts)), fallback: forPeople(e, 'the image service couldn’t draw this one').slice(0, 200) };
   }
 }
 
@@ -282,6 +296,20 @@ export const shootable = s => s.engine !== 'code' && /^boards\/[\w-]+\.png$/.tes
 // rounded onto the film's 24 fps frames as the runtime rounds it (so a talking take's lips meet the voice exactly), with
 // this much air after the last word
 export const LEAD = Math.round(0.35 * 24) / 24, TAIL = 0.75;
+// a shot's line in seconds: as recorded, else estimated from its words (the studio voices average about 2.6 a second)
+const lineSecs = s => {
+  const vo = String(s.vo || '').trim();
+  return !vo ? 0 : s.line?.text === vo ? s.line.dur : vo.split(/\s+/).length / 2.6;
+};
+// how long a shot has to run: its own length, or its line with air either side
+const needs = s => Math.max(+s.dur || 2.5, 0.8, lineSecs(s) ? LEAD + lineSecs(s) + TAIL : 0);
+// what one take of a shot costs with a video engine: a presenter's line performed (when the server can), any other shot
+// filmed as long as it needs; graphics cost nothing
+export function shotCost(s, engine) {
+  if (s.engine === 'code' || !VIDEO[engine]) return 0;
+  if (s.engine === 'presenter' && lineSecs(s) && talkingReady()) { const { rate, min } = talkingPrice(); return Math.max(LEAD + lineSecs(s) + TAIL, min) * rate; }
+  return lengthFor(engine, Math.max(+s.dur || 3, needs(s))) * VIDEO[engine].rate;
+}
 
 // the studio voice a shot's line is spoken in: its speaker's, else the narrator's (null: the film's offline voice)
 export function voiceOf(p, shot) {
@@ -367,11 +395,12 @@ export const takeFor = s => {
 
 // takes per shot, two shots at a time; each take is kept (MP4 and a poster), and the best-checked one is chosen for it.
 // Lines are recorded first, so a shot is filmed long enough for its line, and presenter shots are performed with it.
-export async function shootShots(dir, ids, { engine, takes = 1, onTake, onStep } = {}) {
-  if (studioReady()) { onStep?.('Recording the voices'); await recordLines(dir, ids).catch(e => onStep?.(`Voices: ${e.message}`)); }
+// stopped(): true once someone stops the shoot; the takes under way finish (they're paid for) and no more start
+export async function shootShots(dir, ids, { engine, takes = 1, onTake, onStep, stopped = () => false } = {}) {
+  if (studioReady()) { onStep?.('Recording the voices'); await recordLines(dir, ids).catch(e => onStep?.(`Voices: ${forPeople(e, 'some lines couldn’t be recorded')}`)); }
   const queue = ids.flatMap(id => Array.from({ length: takes }, () => id));
   const worker = async () => {
-    while (queue.length) {
+    while (queue.length && !stopped()) {
       const id = queue.shift();
       const p = read(dir), shot = p.shots.find(s => s.id === id);
       if (!shot || !shootable(shot)) { onTake?.(id, new Error('This shot needs a generated storyboard frame first.')); continue; }
@@ -442,9 +471,14 @@ export async function clipsInto(dir, p, filmDir) {
 export function cutLength(p) {
   return p.shots.reduce((sum, s) => {
     const t = takeFor(s);
-    return sum + Math.max(+s.dur || 2.5, 0.8, s.line && s.vo ? LEAD + s.line.dur + TAIL : 0, t?.engine === 'talking' ? t.seconds : 0);
+    return sum + Math.max(needs(s), t?.engine === 'talking' ? t.seconds : 0);
   }, 0);
 }
+// a film over the studio's length, said so people can fix it (null when it fits)
+export const tooLong = p => {
+  const n = cutLength(p);
+  return n > MAX_SECONDS + 0.05 ? `This film runs about ${Math.round(n)} seconds; films can be up to ${MAX_SECONDS}. Shorten a few lines or shots first.` : null;
+};
 
 // the sound a cut needs that the takes don't carry: a score the film's length (score/), and any missing take sound.
 // Everything lands in the production folder; the cut copies it. → { score, cost }
@@ -480,11 +514,11 @@ export async function soundForCut(dir, { onStep } = {}) {
 }
 
 // a few at a time, each frame saved and reported as it lands
-export async function drawBoards(dir, ids, { onShot, onStep, model } = {}) {
+export async function drawBoards(dir, ids, { onShot, onStep, model, stopped = () => false } = {}) {
   if (STYLES[read(dir).style]?.vertex) { onStep?.('Casting the characters'); await ensureCast(dir).catch(() => {}); }
   const queue = [...ids], busy = [];
   const worker = async (first = true) => {
-    while (queue.length) {
+    while (queue.length && !stopped()) {
       const id = queue.shift();
       const p = read(dir), shot = p.shots.find(s => s.id === id);
       if (!shot) continue;
@@ -513,9 +547,7 @@ export async function drawBoards(dir, ids, { onShot, onStep, model } = {}) {
 export function review(p) {
   const brief = `${p.brief} ${p.notes || ''}`;
   const shots = (p.shots || []).map(s => ({ id: s.id, unsupported: unsupportedNumbers(`${s.vo} ${s.super}`, s.proof || [], brief) }));
-  const total = (p.shots || []).reduce((t, s) => t + (+s.dur || 0), 0);
-  const shoot = (p.shots || []).reduce((t, s) => t + (+s.dur || 0) * (RATE[s.engine] || 0), 0);
-  return { shots, total, shoot: Math.round(shoot * 100) / 100 };
+  return { shots, total: Math.round(cutLength({ shots: p.shots || [] }) * 10) / 10, max: MAX_SECONDS };
 }
 
 // —— 4. the animatic: a quick film (templates/animatic) built from the boards ——

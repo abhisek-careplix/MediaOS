@@ -643,6 +643,7 @@ details.hood pre { margin: 10px 0 0; max-height: 360px; overflow: auto; backgrou
 .board-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
 .board-head h2 { margin: 2px 0 4px; }
 .board-head p { margin: 2px 0; }
+.board-head .length-warn { display: flex; gap: 6px; align-items: center; color: var(--orange); font-size: 13px; }
 .board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
 .board-grid.tall { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .shot { display: grid; gap: 6px; align-content: start; }
