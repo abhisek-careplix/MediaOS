@@ -9,7 +9,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { vertexToken, vertexProject, vertexStatus } from './vertex.mjs';
 import { falReady, upload, run, fetchFile } from './fal.mjs';
-import { billed } from './ledger.mjs';
+import { billed, charge, estimate } from './ledger.mjs';
 
 const LOCATION = process.env.VERTEX_VIDEO_LOCATION || 'us-central1';
 // rate: USD per second of video, from the providers' price lists (Veo without sound; Kling 3 Pro without sound)
@@ -46,15 +46,17 @@ const busy = (status, detail) => Object.assign(new Error(status === 429 ? 'The v
 export async function shootClip({ engine, image, prompt, seconds, aspect = '16:9', elements = [] }) {
   const e = ENGINES[engine];
   if (!e) throw new Error('Unknown video engine.');
-  const len = lengthFor(engine, seconds);
-  const mp4 = await slot(() => (e.provider === 'veo' ? veo(e.model, { image, prompt, len, aspect }) : kling(e.model, { image, prompt, len, elements })));
-  return billed('video', { mp4, seconds: len, cost: len * e.rate }, { engine: e.name });
+  const len = lengthFor(engine, seconds), bill = { kind: 'video', engine: e.name, seconds: len, cost: len * e.rate };
+  const mp4 = await slot(() => (e.provider === 'veo' ? veo(e.model, { image, prompt, len, aspect }, bill) : kling(e.model, { image, prompt, len, elements }, bill)));
+  return billed('video', { mp4, seconds: len, cost: bill.cost }, { engine: e.name });
 }
 
 // —— talking shots: a person in a frame speaks a recorded line, lips, face and body in time with it ——
 // In order of preference (a blind comparison of these and six others on the same shot put the first narrowly ahead);
 // each usually takes 2-4 minutes, and when one stalls or fails the next takes over (an unpaid account or a safety block
 // isn't retried). A model with a minimum audio length gets the line with silence after it, and its clip is trimmed back.
+// A model given up on may still bill (lib/fal.mjs run() records the estimate), and one whose clip was made but couldn't be
+// used did: each is in the ledger as well as the one that worked.
 const TALKERS = [
   { model: process.env.TALK_MODEL || 'bytedance/omnihuman/v2', rate: 0.105, minutes: 10, input: {}, minAudio: 4 },
   { model: 'fal-ai/bytedance/omnihuman/v1.5', rate: 0.16, minutes: 10, input: { resolution: '720p' } },
@@ -82,8 +84,10 @@ async function perform({ image, audio, prompt }) {
       return (urls[key] = await upload({ data: fs.readFileSync(file), mime: 'audio/wav', name: 'line.wav' }));
     };
     for (const [k, t] of TALKERS.entries()) {
+      const seconds = Math.max(dur, t.minAudio || 0);
+      let out = null;
       try {
-        const out = await run(t.model, { image_url, audio_url: await audioFor(t.minAudio), prompt, ...t.input }, { minutes: t.minutes });
+        out = await run(t.model, { image_url, audio_url: await audioFor(t.minAudio), prompt, ...t.input }, { minutes: t.minutes, bill: { kind: 'video', engine: 'Talking', seconds, cost: seconds * t.rate } });
         const made = +out.duration || dur, raw = path.join(tmp, 'take.mp4'), cut = path.join(tmp, 'cut.mp4');
         fs.writeFileSync(raw, await fetchFile(out.video?.url));
         // back to the line's own length when it was padded
@@ -91,6 +95,7 @@ async function perform({ image, audio, prompt }) {
         if (padded) await sh('ffmpeg', ['-v', 'error', '-y', '-i', raw, '-t', dur.toFixed(3), '-c:v', 'libx264', '-crf', '16', '-preset', 'medium', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', cut]);
         return billed('video', { mp4: fs.readFileSync(padded ? cut : raw), seconds: padded ? dur : made, cost: made * t.rate }, { engine: 'Talking' });
       } catch (e) {
+        if (out) charge('video', (+out.duration || seconds) * t.rate, { engine: 'Talking', note: 'made, but the clip couldn’t be used' });
         if (k === TALKERS.length - 1 || e.code === 402 || /safety/i.test(e.message)) throw e;
         console.error(`talking shot: ${t.model} failed, trying the next model;`, e.detail || e.message);
       }
@@ -99,9 +104,20 @@ async function perform({ image, audio, prompt }) {
 }
 
 // —— Veo: a long-running prediction, polled until the video is ready (about a minute) ——
-async function veo(model, { image, prompt, len, aspect }) {
+// One given up on (too slow, or the service stopped answering) may still be made and billed: it goes in the ledger as an
+// estimate (bill: { kind, engine, seconds, cost }), and veoOutcome later asks how it ended. There's no cancelling one.
+const veoBase = (project, model) => `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${project}/locations/${LOCATION}/publishers/google/models/${model}`;
+const veoPoll = (base, t, op) => fetch(base + ':fetchPredictOperation', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(60000), body: JSON.stringify({ operationName: op }) });
+// how an abandoned prediction ended: 'confirmed' (a video was made), 'cleared' (it failed or was filtered), or null
+export async function veoOutcome({ model, op }) {
   const [t, p] = await Promise.all([vertexToken(), vertexProject()]);
-  const base = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${p}/locations/${LOCATION}/publishers/google/models/${model}`;
+  const r = await veoPoll(veoBase(p, model), t, op);
+  const j = r.ok ? await r.json().catch(() => ({})) : {};
+  return !j.done ? null : j.response?.videos?.length ? 'confirmed' : 'cleared';
+}
+async function veo(model, { image, prompt, len, aspect }, bill) {
+  const [t, p] = await Promise.all([vertexToken(), vertexProject()]);
+  const base = veoBase(p, model);
   const H = { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' };
   let op;
   for (let attempt = 0; ; attempt++) {
@@ -114,23 +130,26 @@ async function veo(model, { image, prompt, len, aspect }) {
     op = j.name;
     break;
   }
+  const abandon = () => estimate(bill, op.split('/').pop(), { via: 'veo', model, op });
   const until = Date.now() + 8 * 60e3;
   while (Date.now() < until) {
     await wait(6000);
-    const r = await fetch(base + ':fetchPredictOperation', { method: 'POST', headers: H, signal: AbortSignal.timeout(60000), body: JSON.stringify({ operationName: op }) });
+    const r = await veoPoll(base, t, op).catch(() => null);
+    if (!r) continue;
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { if (r.status === 429 || r.status >= 500) continue; throw busy(r.status, j.error?.message); }
+    if (!r.ok) { if (r.status === 429 || r.status >= 500) continue; abandon(); throw busy(r.status, j.error?.message); }
     if (!j.done) continue;
     if (j.error) throw Object.assign(new Error('The video service couldn’t make this shot.'), { detail: j.error.message });
     const v = j.response?.videos?.[0];
     if (!v?.bytesBase64Encoded) throw new Error(j.response?.raiMediaFilteredCount ? 'This shot was blocked by the video service’s safety filter. Change the action and try again.' : 'No video came back.');
     return Buffer.from(v.bytesBase64Encoded, 'base64');
   }
+  abandon();
   throw new Error('The video took too long. Try this shot again.');
 }
 
 // —— Kling through fal.ai: the frame (and the cast's portraits) uploaded, then the queue ——
-async function kling(model, { image, prompt, len, elements }) {
+async function kling(model, { image, prompt, len, elements }, bill) {
   const field = process.env.FAL_KLING_IMAGE_FIELD || 'start_image_url';
   const els = [];
   for (const el of elements.slice(0, 3)) {
@@ -141,6 +160,6 @@ async function kling(model, { image, prompt, len, elements }) {
     prompt, [field]: await upload({ ...image, name: 'frame.png' }), duration: String(len), generate_audio: false,
     negative_prompt: 'blur, distortion, warped face, extra fingers, text, captions, subtitles, watermark, logo',
     ...(els.length ? { elements: els } : {}),
-  }, { minutes: 12 });
+  }, { minutes: 12, bill });
   return fetchFile(out.video?.url);
 }

@@ -19,12 +19,13 @@ export async function composeScore(dir, { mood, bpm, what, seconds }) {
   const prompt = `An original instrumental score for a ${what}: ${mood}. Around ${bpm || 100} BPM. Polished, modern production for a premium advert: an inviting opening, gentle build through the middle, a clear lift near the end and a clean, resolved ending (no fade-out). No vocals, no lyrics, no sound effects.`;
   const name = `score/${hash(MUSIC_MODEL, prompt, len)}.wav`, file = path.join(dir, name);
   if (fs.existsSync(file)) return { file: name, cost: 0, cached: true };
-  const out = await run(MUSIC_MODEL, { prompt, music_length_ms: len * 1000, force_instrumental: true, output_format: 'mp3_44100_192' }, { minutes: 6 });
+  const cost = len / 60 * 0.6;
+  const out = await run(MUSIC_MODEL, { prompt, music_length_ms: len * 1000, force_instrumental: true, output_format: 'mp3_44100_192' }, { minutes: 6, bill: { kind: 'voice', engine: 'Score', seconds: len, cost } });
   const mp3 = await fetchFile(out.audio?.url);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file + '.src', mp3);
   await ff(['-i', file + '.src', '-ar', '48000', '-ac', '2', file]).finally(() => fs.rmSync(file + '.src', { force: true }));
-  return billed('voice', { file: name, cost: len / 60 * 0.6, cached: false }, { engine: 'Score' });
+  return billed('voice', { file: name, cost, cached: false }, { engine: 'Score' });
 }
 
 // each shot's bed: steady room tone for its place, with any foley kept soft and occasional. Made from words: a model
@@ -36,10 +37,11 @@ export async function ambienceFor(dir, take, { ambience = '' }) {
   const [place, ...rest] = String(ambience || 'a quiet modern office').split(',').map(x => x.trim()).filter(Boolean);
   const seconds = Math.min(22, Math.max(1, Math.ceil(take.seconds || 4)));
   const text = `Steady, quiet background room tone of ${place}${rest.length ? `, with very soft, occasional ${rest.join(' and ')}` : ''}. Subtle and continuous. No voices, no music, no wind.`;
-  const out = await run(AMBIENCE_MODEL, { text: text.slice(0, 450), duration_seconds: seconds, prompt_influence: 0.6 }, { minutes: 3 });
+  const cost = seconds * 0.002;
+  const out = await run(AMBIENCE_MODEL, { text: text.slice(0, 450), duration_seconds: seconds, prompt_influence: 0.6 }, { minutes: 3, bill: { kind: 'voice', engine: 'Sound', seconds, cost } });
   const mp3 = await fetchFile(out.audio?.url);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file + '.mp3', mp3);
   await ff(['-i', file + '.mp3', '-ar', '48000', '-ac', '2', file]).finally(() => fs.rmSync(file + '.mp3', { force: true }));
-  return billed('voice', { file: name, cost: seconds * 0.002, cached: false }, { engine: 'Sound' });
+  return billed('voice', { file: name, cost, cached: false }, { engine: 'Sound' });
 }

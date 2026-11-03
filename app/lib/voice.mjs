@@ -53,8 +53,9 @@ export async function speak({ text, voice, delivery = '', cacheDir }) {
   const how = EXPRESSIVE ? direction(delivery) : '';
   const file = path.join(cacheDir, `${lineKey(voice, words, how)}.wav`);
   if (fs.existsSync(file)) return { file, dur: await durOf(file), cost: 0, cached: true };
+  const cost = words.length / 1000 * 0.1;
   const out = await run(MODEL, EXPRESSIVE ? { text: how ? `[${how}] ${words}` : words, voice: v.v, stability: 0.5, apply_text_normalization: 'auto' }
-    : { text: words, voice: v.v, stability: 0.45, similarity_boost: 0.8, style: 0.2, speed: 1, apply_text_normalization: 'auto' }, { minutes: 3 });
+    : { text: words, voice: v.v, stability: 0.45, similarity_boost: 0.8, style: 0.2, speed: 1, apply_text_normalization: 'auto' }, { minutes: 3, bill: { kind: 'voice', engine: 'Studio voice', cost } });
   const mp3 = await fetchFile(out.audio?.url);
   fs.mkdirSync(cacheDir, { recursive: true });
   const tmp = file + '.src';
@@ -62,7 +63,7 @@ export async function speak({ text, voice, delivery = '', cacheDir }) {
   // trim the silence either side (a little air left in), as the offline voice does, so timing is the words themselves
   const trim = 'silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.03';
   await ff(['-i', tmp, '-af', `${trim},areverse,${trim.replace('0.03', '0.08')},areverse`, '-ac', '1', '-ar', '44100', file]).finally(() => fs.rmSync(tmp, { force: true }));
-  return billed('voice', { file, dur: await durOf(file), cost: words.length / 1000 * 0.1, cached: false }, { engine: 'Studio voice' });
+  return billed('voice', { file, dur: await durOf(file), cost, cached: false }, { engine: 'Studio voice' });
 }
 
 // a line padded with silence (lead before, tail after), for a talking shot that has to match the film's timing
