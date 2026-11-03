@@ -29,8 +29,8 @@ function tile(f) {
   else if (src) frame.append(h('video', { src: src + '#t=2', muted: true, preload: 'metadata', playsinline: true }));
   else if (f.mode === 'deck') frame.append(h('div', { class: 'ph' }, icon('slides', 20), 'Deck · not exported yet'));
   else if (f.mode === 'production') frame.append(f.cover ? h('img', { src: `/films/${f.id}/${f.cover}`, alt: '' }) : h('div', { class: 'ph' }, icon('clapper', 20), 'Production · concepts'));
-  else frame.append(style?.frame ? h('img', { src: style.frame, alt: '', style: { opacity: .28, filter: 'grayscale(.5)' } }) : null,
-    h('div', { class: 'ph' }, icon(f.status === 'running' ? 'sparkles' : 'pencil', 20), f.status === 'running' ? (f.step || 'In production') : 'Draft · not exported'));
+  else frame.append(...(style?.frame ? [h('img', { src: style.frame, alt: '', style: { opacity: .28, filter: 'grayscale(.5)' } })] : []),
+    h('div',{ class: 'ph' }, icon(f.status === 'running' ? 'sparkles' : 'pencil', 20), f.status === 'running' ? (f.step || 'In production') : 'Draft · not exported'));
   const stopped = ['failed', 'interrupted', 'cancelled'].includes(f.status);
   frame.append(h('span', { class: 'badge ' + (f.status === 'running' ? 'live' : f.status || '') }, f.status === 'running' ? 'Live' : stopped ? f.status[0].toUpperCase() + f.status.slice(1) : f.mode === 'deck' ? 'Deck' : f.mode === 'production' ? 'Storyboard' : f.mode === 'director' ? 'Directed' : f.output ? 'Instant' : 'Draft'));
   let vid = null;
