@@ -1,5 +1,6 @@
 // Spend: what the studio's paid generation cost this month (lib/ledger.mjs), by product, person and kind, and the
-// monthly caps a budget owner sets. New paid work is refused once a cap would be passed.
+// monthly caps a budget owner sets. New paid work is refused once a cap would be passed. Work the studio gave up waiting
+// for shows as estimated until the service says whether it charged for it.
 import { h, api, icon, toast, app, go, timeAgo } from './core.js';
 
 let root;
@@ -36,6 +37,7 @@ export async function showSpend(args = []) {
       h('div', { class: 'stat' }, h('b', {}, caps.total != null ? usd(caps.total) : 'None'), h('span', {}, 'studio cap')),
       h('div', { class: 'stat' + (left != null && left < 0 ? ' over' : '') }, h('b', {}, left != null ? usd(Math.max(0, left)) : '—'), h('span', {}, 'left this month')),
       h('div', { class: 'stat' }, h('b', {}, usd(mine)), h('span', {}, caps.person != null ? `yours, of ${usd(caps.person)}` : 'yours'))),
+    s.estimated > 0 ? h('p', { class: 'faint' }, `${usd(s.estimated)} of this is estimated: the studio gave up waiting for ${s.estimates === 1 ? 'one piece of work' : `${s.estimates} pieces of work`}, and the service may still charge for ${s.estimates === 1 ? 'it' : 'them'}. Estimates count toward the caps. Each is checked every few minutes for a day: it stays once the service confirms the charge, and drops off if there was none.`) : null,
     h('div', { class: 'sp-grid' },
       bars('By product', s.byBrand, r => brandName(r.key)),
       bars('By person', s.byPerson, r => r.label || r.key || 'System'),
@@ -46,7 +48,7 @@ export async function showSpend(args = []) {
         h('tr', {}, ['When', 'Who', 'Product', 'Kind', 'For', 'Cost'].map(t => h('th', {}, t))),
         s.entries.map(e => h('tr', {},
           h('td', {}, timeAgo(e.at)), h('td', {}, e.name || e.who), h('td', {}, brandName(e.brandId)), h('td', {}, [s.kinds[e.kind] || e.kind, e.engine].filter(Boolean).join(' · ')),
-          h('td', {}, assetRoute(e.asset) ? h('a', { href: '#' + assetRoute(e.asset) }, e.asset) : e.asset || ''), h('td', { class: 'num' }, usd(e.amount))))) : h('small', { class: 'faint' }, 'Nothing spent this month.'))));
+          h('td', {}, assetRoute(e.asset) ? h('a', { href: '#' + assetRoute(e.asset) }, e.asset) : e.asset || ''), h('td', { class: 'num' }, e.estimated ? [h('span', { class: 'badge warn', title: 'The studio gave up waiting for this; the service may still charge for it' }, 'estimated'), ' '] : null, usd(e.amount))))) : h('small', { class: 'faint' }, 'Nothing spent this month.'))));
 }
 
 function capsForm(caps) {

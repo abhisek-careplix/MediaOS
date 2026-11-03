@@ -2,6 +2,8 @@
 // A request goes through fal's queue: submit, poll until it is done, read the result; files go up to fal's storage first,
 // and finished files are downloaded straight away (fal's links are temporary). Errors are worded without the provider's
 // name; the detail goes to the server log.
+import { estimate, settle } from './ledger.mjs';
+
 export const falReady = () => !!process.env.FAL_KEY;
 const H = () => ({ Authorization: 'Key ' + process.env.FAL_KEY });
 const wait = ms => new Promise(res => setTimeout(res, ms));
@@ -37,8 +39,27 @@ export async function upload({ data, mime, name = 'file' }) {
   }
 }
 
-// run a model: (endpoint, input) → its output object; minutes caps the wait
-export async function run(model, input, { minutes = 10 } = {}) {
+// a request given up on may still be made and billed: an estimate goes in the ledger at once (bill: { kind, engine,
+// seconds, cost }), then the request is cancelled. One still in the queue is dropped, so its estimate is cleared; one under
+// way may finish all the same, and queueOutcome settles it later.
+async function abandon(q, bill) {
+  if (!bill) return;
+  const id = estimate(bill, q.request_id, { via: 'queue', status: q.status_url });
+  const r = await fetch(q.cancel_url || q.status_url.replace(/\/status$/, '/cancel'), { method: 'PUT', headers: H(), signal: AbortSignal.timeout(30000) }).catch(() => null);
+  const j = await r?.json().catch(() => ({}));
+  if (r?.ok && j?.status === 'OK') settle(id, 'cleared');
+}
+// how an abandoned request ended: 'confirmed' (made), 'cleared' (failed or cancelled), or null while it isn't known
+export async function queueOutcome({ status }) {
+  if (!falReady()) return null;
+  const r = await fetch(status, { headers: H(), signal: AbortSignal.timeout(30000) });
+  const s = r.ok ? await r.json().catch(() => ({})) : {};
+  return s.status === 'COMPLETED' ? (s.error ? 'cleared' : 'confirmed') : null;
+}
+
+// run a model: (endpoint, input) → its output object; minutes caps the wait, and bill is what the request costs if it's
+// made (see abandon)
+export async function run(model, input, { minutes = 10, bill } = {}) {
   if (!falReady()) throw new Error('This service isn’t set up on this server.');
   let q;
   for (let attempt = 0; ; attempt++) {
@@ -57,7 +78,8 @@ export async function run(model, input, { minutes = 10 } = {}) {
     if (!s) continue;
     last = s.status;
     if (s.status === 'COMPLETED') {
-      const r = await net(q.response_url, { headers: H() }, 60000);
+      // made but not read back: as good as abandoned
+      const r = await net(q.response_url, { headers: H() }, 60000).catch(async e => { await abandon(q, bill); throw e; });
       const out = await r.json().catch(() => ({}));
       if (!r.ok) {
         const d = JSON.stringify(out.detail || out).slice(0, 400);
@@ -67,6 +89,7 @@ export async function run(model, input, { minutes = 10 } = {}) {
     }
     if (s.status && !['IN_QUEUE', 'IN_PROGRESS'].includes(s.status)) throw fail('The studio service couldn’t make this.', `${model} ${JSON.stringify(s).slice(0, 300)}`);
   }
+  await abandon(q, bill);
   throw fail('That took too long. Try again.', `${model}: gave up after ${minutes} min, last status ${last}${last === 'IN_QUEUE' ? ' (still waiting in the queue)' : ''}`);
 }
 

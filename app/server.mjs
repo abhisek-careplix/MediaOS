@@ -19,14 +19,15 @@ import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, s
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
 import { FORMATS, STYLES, readProduction, saveProduction, writeConcepts, writeShots, drawBoard, drawBoards, ensureCast, review, animaticScript, shootShots, shootable, clipsInto, soundForCut, voiceOf, takeFor, MAX_SECONDS, tooLong, shotCost } from './lib/productions.mjs';
-import { talkingReady, talkingPrice } from './lib/video.mjs';
+import { talkingReady, talkingPrice, veoOutcome } from './lib/video.mjs';
+import { queueOutcome } from './lib/fal.mjs';
 import { soundReady } from './lib/sound.mjs';
 import { engines, ENGINES } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
 import { governApi, writeGate, GOVERNED } from './lib/govern.mjs';
 import { runAs, tag } from './lib/context.mjs';
 import { rolesOf, can } from './lib/team.mjs';
-import { overCap } from './lib/ledger.mjs';
+import { overCap, followUp } from './lib/ledger.mjs';
 import { audit } from './lib/audit.mjs';
 import { plan as deletePlan, remove as deleteFilm, sweep } from './lib/removal.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
@@ -748,6 +749,8 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));
 startSync();
+// paid work given up on, settled once its service says how it ended
+followUp({ queue: queueOutcome, veo: veoOutcome });
 
 // a deploy (or Ctrl-C) stops the server: running renders and shoots finish first, for up to DRAIN_MINUTES (15), while
 // new work is refused; then a last backup and exit. A second signal stops at once.
