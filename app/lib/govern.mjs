@@ -1,11 +1,12 @@
-// The studio's checks and balances over HTTP: the team and its roles, reviews and sign-offs, spend and caps, and the
-// audit trail (/api/team, /api/reviews, /api/spend, /api/audit). writeGate() is asked before every API write: who may
-// change what, and whether the month's caps leave room for paid work.
+// The studio's checks and balances over HTTP: the team and its roles, reviews and sign-offs, spend and caps, the audit
+// trail, and the backup and disk use (/api/team, /api/reviews, /api/spend, /api/audit, /api/storage). writeGate() is
+// asked before every API write: who may change what, and whether the month's caps leave room for paid work.
 import { ROLES, rolesOf, can, listTeam, setPerson, removePerson, adminConfigured } from './team.mjs';
 import { listReviews, viewReview, candidates, submit, decide, override, comment, resolveComment, withdraw, recheck, mediaPath, STEPS } from './reviews.mjs';
 import { spendOf, readCaps, writeCaps, overCap, monthOf, KINDS } from './ledger.mjs';
 import { readAudit, verifyAudit } from './audit.mjs';
 import { storageOn, storageStatus, syncNow } from './storage.mjs';
+import { diskUse } from './removal.mjs';
 
 export const GOVERNED = new Set(['team', 'reviews', 'spend', 'audit', 'storage']);
 const NO_ROLE = 'Your role doesn’t include this. Ask an admin to add the Creator role on the Team page.';
@@ -17,6 +18,7 @@ export function writeGate(method, pathname, user) {
   if (['GET', 'HEAD'].includes(method) || !pathname.startsWith('/api/')) return null;
   const area = pathname.split('/')[2];
   if (GOVERNED.has(area)) return null;   // each governed route checks its own roles
+  if (method === 'DELETE' && /^\/api\/films\/[^/]+$/.test(pathname)) return null;   // a delete checks for the owner or an admin itself
   const roles = rolesOf(user);
   if (area === 'proof' ? !roles.some(r => r === 'creator' || r === 'reviewer') : !roles.includes('creator')) return { code: 403, error: NO_ROLE };
   if (SPENDS.some(re => re.test(pathname))) { const over = overCap(user); if (over) return { code: 402, error: over }; }
@@ -75,6 +77,7 @@ async function routes(req, res, parts, url, user, { send, body, serveFile }) {
   // the Cloud Storage backup: how far it got, and a pass now
   if (parts[0] === 'storage') {
     need('admin');
+    if (M === 'GET' && parts[1] === 'usage') return send(res, 200, diskUse());
     if (M === 'GET') return send(res, 200, storageStatus());
     if (M === 'POST' && parts[1] === 'sync') {
       if (!storageOn()) return send(res, 400, { error: 'Cloud Storage isn’t set up on this server.' });

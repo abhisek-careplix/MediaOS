@@ -179,14 +179,55 @@ All of it lives in `/data/governance` on the server (`governance/` locally).
 `gcp-up.sh` creates the bucket (through `deploy/gcp-storage.sh`) and sets `MEDIA_BUCKET` on the server. Admins see the last backup, its problems and the disk use on the **Team** page, with **Back up now**.
 
 **Safeguards.**
-- A pass that finds a folder emptied (a fresh disk before a restore) never empties the bucket.
+- A pass that finds a whole folder (all films, say) empty, as on a fresh disk before a restore, removes none of its files from the bucket.
+- A pass that finds more files missing than it may remove (25, or a tenth of all files if that is more) removes none of them and reports it on the Team page.
 - A file that has gone missing from the disk is streamed from the bucket instead of failing, including video seeking.
+- Deletes made in the studio are exempt from the first two (see below).
 
 **Restore.** On a new or rebuilt server, deploy as usual, then fetch everything back:
 ```bash
 gcloud --project careplix-labs compute ssh videogen --zone us-central1-a --command 'cd videogen && sudo docker compose exec videogen node app/scripts/restore.mjs'
 ```
 `--dry` lists what it would fetch. `--force` also replaces files whose size differs from the stored copy. An older version of a single file: `gcloud storage ls --all-versions gs://careplix-labs-studio-media/studio/<path>`, then `gcloud storage cp` the one you want.
+
+## Deleting films and productions
+
+The disk only grows until something is deleted. Takes, sound and cuts make a production the largest thing on it.
+
+**Who can delete.** The person who made a film, deck or production (while they hold the Creator role), or an admin. On the open site, nobody can.
+
+**Where.**
+- Each Library card has a delete button.
+- A production has one at the right of its top bar.
+- Admins see **Disk use** on the Team page, under Storage: everything largest first (a production counts the animatics and cuts made from it), each with a delete.
+
+**What it does.** It asks first, saying what goes, what stays and how much space it frees. Then it removes the whole folder:
+- for a production, its frames, cast portraits, voices, takes and sound, and the animatics and cuts made from it;
+- for a film or deck, everything in it.
+
+**What it refuses or keeps.**
+- Nothing is deleted while work runs for it (frames, takes, a cut, an export, a directed film), or while a request is still saving to it.
+- A film or deck in review can't be deleted: withdraw it from review first.
+- One with any sign-off can't be deleted at all. It stays as the record of what was approved.
+- When a production is deleted, its cuts that are in review or signed off, or that someone else made, are kept. They stay in the Library on their own, since each carries its own takes and sound.
+- Reviews and their frozen copies, spending records and the audit trail are never touched.
+
+**The record.** Each delete adds an entry to the audit trail (`production.deleted`, `film.deleted` or `deck.deleted`): who, the title, the owner, the size, what went with it and what was kept.
+
+**Deletes and the backup.** A delete is recorded before the folder goes. The backup pass it starts removes exactly those files from the bucket, even past the two safeguards above. Without this, a production with its cuts (150 to 300 files is common) is more than one pass may remove: it would stay in the bucket, and every pass would report the problem and also hold back ordinary removals. Once deleted, its files are no longer served from the bucket either.
+
+**Undoing a delete.** The bucket keeps the deleted files as old versions for 30 days. To bring a folder back, take its id from the audit trail:
+1. List each file's versions (each ends in `#<generation>`):
+   ```bash
+   gcloud storage ls --all-versions 'gs://careplix-labs-studio-media/studio/films/<id>/**'
+   ```
+2. Copy each file's newest version back to its own name:
+   ```bash
+   gcloud storage cp 'gs://careplix-labs-studio-media/studio/films/<id>/<file>#<generation>' 'gs://careplix-labs-studio-media/studio/films/<id>/<file>'
+   ```
+3. Run `restore.mjs` as above.
+
+These steps haven't been run against the bucket yet.
 
 **Safe deploys.** A deploy builds the new image first, then stops the old server, which lets running renders and shoots finish (up to `DRAIN_MINUTES`, 15). Meanwhile:
 - pages, comments and sign-offs keep working;

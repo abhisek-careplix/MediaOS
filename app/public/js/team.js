@@ -1,6 +1,7 @@
 // Team: who may do what (lib/team.mjs). Anyone at CarePlix who signs in can make things; sign-offs and caps need the
 // roles below, which an admin gives here.
 import { h, api, icon, toast, app, timeAgo } from './core.js';
+import { size, confirmDelete } from './remove.js';
 
 let root;
 export function mountTeam(el) { root = el; }
@@ -38,6 +39,7 @@ export async function showTeam() {
       admin ? h('div', { class: 'tm-add' }, h('b', {}, 'Add someone'), h('div', { class: 'row2' }, email, name), freshChips,
         h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => save(email.value, name.value, fresh) }, icon('plus', 14), 'Add'))) : null),
     admin ? storageCard() : null,
+    admin ? usageCard() : null,
     h('p', { class: 'faint' }, 'Your roles: ', t.me.roles.map(r => t.roles[r]?.name).join(', ') || 'none (view only)')));
 }
 
@@ -60,8 +62,31 @@ function storageCard() {
       s.on ? h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: async ev => {
         ev.target.disabled = true;
         try { paint(await api('storage/sync', { method: 'POST' })); toast('Backed up.', 'ok'); } catch (e) { toast(e.message, 'error'); ev.target.disabled = false; }
-      } }, 'Back up now')) : null);
+      } }, 'Back up now')) : '');
   };
   api('storage').then(paint).catch(() => card.remove());
+  return card;
+}
+
+// admins: what takes the disk, largest first, each with a delete (a production counts what was made from it)
+function usageCard() {
+  const card = h('div', { class: 'sp-card' }, h('div', { class: 'section-head' }, h('b', {}, 'Disk use')), h('small', { class: 'faint' }, 'Loading…'));
+  const KIND = { production: 'Production', film: 'Film', deck: 'Deck' };
+  let all = false;
+  const paint = u => {
+    const top = u.items[0]?.bytes || 1, list = all ? u.items : u.items.slice(0, 10);
+    card.replaceChildren(
+      h('div', { class: 'section-head' }, h('b', {}, 'Disk use'), h('small', { class: 'faint' }, `${size(u.bytes)} in ${u.items.length} productions, films and decks`)),
+      ...list.map(x => h('div', { class: 'du-row' },
+        h('div', { class: 'tm-who' }, h('a', { href: '#' + ({ production: 'productions/', deck: 'decks/', director: 'studio/' }[x.mode] || 'create/') + x.id }, x.title),
+          h('small', { class: 'faint' }, [KIND[x.kind], x.made ? `with ${x.made} animatic${x.made > 1 ? 's' : ''} or cut${x.made > 1 ? 's' : ''}` : null, x.ownerName || x.owner, x.created ? timeAgo(x.created) : null].filter(Boolean).join(' · '))),
+        h('div', { class: 'du-bar', 'aria-hidden': 'true' }, h('i', { style: { width: Math.max(1, Math.round(100 * x.bytes / top)) + '%' } })),
+        h('span', { class: 'du-size' }, size(x.bytes)),
+        h('button', { class: 'btn ghost round danger', title: 'Delete', 'aria-label': 'Delete ' + x.title, onclick: () => confirmDelete(x.id, { onDone: load }) }, icon('trash', 14)))),
+      u.items.length > 10 ? h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => { all = !all; paint(u); } }, all ? 'Show the largest 10' : `Show all ${u.items.length}`)) : '',
+      h('small', { class: 'faint' }, 'Deleting frees the space at once. Anything in review or with sign-offs stays.'));
+  };
+  const load = () => api('storage/usage').then(paint).catch(() => card.remove());
+  load();
   return card;
 }

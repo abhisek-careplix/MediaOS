@@ -1,5 +1,6 @@
 // Library: every film made here, quick and directed, with posters that play on hover.
 import { $$, h, api, icon, app, go, segmented, timeAgo } from './core.js';
+import { mayDelete, confirmDelete } from './remove.js';
 
 let root, filter = 'all';
 
@@ -48,5 +49,6 @@ function tile(f) {
     });
     el.addEventListener('mouseleave', () => { vid?.remove(); vid = null; });
   }
-  return el;
+  // the person who made it, or an admin, can delete it here
+  return mayDelete(f) ? h('div', { class: 'lcell' }, el, h('button', { class: 'lc-del', title: 'Delete', 'aria-label': `Delete ${f.filmTitle || f.title || 'Untitled'}`, onclick: () => confirmDelete(f.id, { onDone: showLibrary }) }, icon('trash', 14))) : el;
 }

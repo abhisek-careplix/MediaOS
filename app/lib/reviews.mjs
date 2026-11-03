@@ -79,6 +79,9 @@ const summary = (r, user) => ({ id: r.id, asset: r.asset, version: { n: r.versio
   status: r.status, steps: r.steps.map(({ role, status, name, at }) => ({ role, status, name, at })), checks: { status: r.checks?.status, open: openItems(r).length, total: r.checks?.items?.length || 0 },
   comments: r.comments.filter(c => !c.resolved).length, turn: turn(r)?.role || null, can: abilities(r, user) });
 
+// every version of one film or deck that went up for review
+export const reviewsOf = assetId => all().filter(r => r.asset.id === assetId);
+
 export function listReviews(user) {
   return all().map(settle).map(r => summary(r, user)).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 }
@@ -92,7 +95,7 @@ export function viewReview(id, user) {
 export function candidates() {
   const busy = new Map(all().filter(r => ['in-review', 'changes'].includes(r.status)).map(r => [r.asset.id, r]));
   return fs.readdirSync(FILMS).map(id => {
-    const dir = path.join(FILMS, id), m = readMeta(dir);
+    const dir = path.join(FILMS, id), m = id.startsWith('.') ? null : readMeta(dir);
     if (!m) return null;
     const file = m.mode === 'deck' ? m.files?.pdf : m.status === 'done' ? m.output : null;
     if (!file || !fs.existsSync(path.join(dir, file))) return null;
