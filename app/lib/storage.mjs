@@ -117,16 +117,30 @@ export function syncNow() {
         catch (e) { errors.push(`${f.key}: ${e.message}`); }
       }
     }));
-    // deletions, with a guard: a missing or emptied folder (a fresh disk before a restore) never empties the bucket
-    const gone = Object.keys(m.files).filter(k => !seen.has(k) && present[k.slice(PREFIX.length).split('/')[0]] > 0);
-    const limit = Math.max(25, Math.round(Object.keys(m.files).length * 0.1));
-    if (gone.length > limit) errors.push(`${gone.length} files are missing from the disk, more than a pass may remove (${limit}); nothing was removed from the bucket.`);
-    else for (const k of gone) { try { await del(k); delete m.files[k]; deleted++; } catch (e) { errors.push(`${k}: ${e.message}`); } }
+    // deletions, with guards: a missing or emptied folder (a fresh disk before a restore) never empties the bucket, and
+    // a pass that finds many files missing removes none of them. Folders deleted in the studio are exempt from both.
+    const meant = k => (m.purged || []).some(p => k.startsWith(p));
+    const gone = Object.keys(m.files).filter(k => !seen.has(k) && (meant(k) || present[k.slice(PREFIX.length).split('/')[0]] > 0));
+    const missing = gone.filter(k => !meant(k)), limit = Math.max(25, Math.round(Object.keys(m.files).length * 0.1));
+    if (missing.length > limit) errors.push(`${missing.length} files are missing from the disk, more than a pass may remove (${limit}); they were left in the bucket.`);
+    for (const k of missing.length > limit ? gone.filter(meant) : gone) { try { await del(k); delete m.files[k]; deleted++; } catch (e) { errors.push(`${k}: ${e.message}`); } }
+    // a deleted folder is forgotten once the bucket holds none of its files
+    m.purged = (m.purged || []).filter(p => Object.keys(m.files).some(k => k.startsWith(p)));
     m.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, uploaded, deleted, bytes, errors: errors.slice(0, 20), errorCount: errors.length };
     saveManifest();
     if (errors.length) console.error(`[storage] ${errors.length} problem(s) syncing to gs://${BUCKET}/${PREFIX}: ${errors[0]}`);
     return m.lastSync;
   })().finally(() => { running = null; });
+}
+
+// a folder deleted on purpose (a film or production removed in the studio), recorded before it goes: the next pass
+// removes its files from the bucket whatever the guards say, and they are no longer served from there. on = false
+// takes it back (a delete that didn't happen).
+export function deletedOnPurpose(rootName, rel, on = true) {
+  if (!storageOn()) return;
+  const m = loadManifest(), p = keyOf(rootName, rel) + '/';
+  m.purged = (m.purged || []).filter(x => x !== p).concat(on ? [p] : []);
+  saveManifest();
 }
 
 export function startSync() {
@@ -146,7 +160,9 @@ export async function serveFromCloud(req, res, root, rel, type) {
   if (!storageOn()) return false;
   const name = Object.entries(ROOTS).find(([, dir]) => dir === root)?.[0];
   if (!name) return false;
-  const r = await get(keyOf(name, rel), req.headers.range);
+  const key = keyOf(name, rel);
+  if ((loadManifest().purged || []).some(p => key.startsWith(p))) return false;
+  const r = await get(key, req.headers.range);
   if (!r) return false;
   const h = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
   for (const k of ['content-length', 'content-range']) if (r.headers.get(k)) h[k.replace(/(^|-)\w/g, c => c.toUpperCase())] = r.headers.get(k);
@@ -162,7 +178,7 @@ export async function restore({ dry = false, force = false, log = console.log } 
   let fetched = 0, kept = 0, bytes = 0;
   for (const it of items) {
     const rest = it.name.slice(PREFIX.length), [name, ...relParts] = rest.split('/'), dir = ROOTS[name];
-    if (!dir || !relParts.length) continue;
+    if (!dir || !relParts.length || (m.purged || []).some(p => it.name.startsWith(p))) continue;
     const file = path.join(dir, ...relParts);
     if (!file.startsWith(dir + path.sep)) continue;
     const st = fs.existsSync(file) ? fs.statSync(file) : null;

@@ -4,6 +4,7 @@
 // Create to review and export.
 import { $$, h, api, icon, toast, sheet, app, go, pillSelect, segmented } from './core.js';
 import { attachments, dropPhotos, uploading, attachedIds } from './attach.js';
+import { mayDelete, confirmDelete } from './remove.js';
 
 const FORMATS = [
   ['influencer', 'Influencer reel', 'A creator talks to camera, uses the product, jump cuts and captions.'],
@@ -142,7 +143,8 @@ function render() {
     h('button', { class: 'btn ghost', onclick: () => go('productions') }, icon('chevronL', 15), 'Productions'),
     h('div', { class: 'ed-title' }, h('input', { value: p.title || P.meta.title || '', 'aria-label': 'Title', oninput: e => { p.title = e.target.value; queueSave(); } }),
       h('small', {}, `${FORMATS.find(f => f[0] === p.format)?.[1]} · ${p.kind === 'ad' ? 'Ad' : p.kind === 'reel' ? 'Reel' : 'Film'} · ${p.seconds} s · ${p.aspect}${p.brand ? ' · ' + p.brand.name : ''}`)),
-    h('ol', { class: 'steps' }, steps.map(([s, on]) => h('li', { class: on ? 'on' : '' }, s))));
+    h('ol', { class: 'steps' }, steps.map(([s, on]) => h('li', { class: on ? 'on' : '' }, s))),
+    mayDelete(P.meta) ? h('button', { class: 'btn ghost danger round', title: 'Delete this production', 'aria-label': 'Delete this production', onclick: async () => { await save(true); confirmDelete(P.id, { onDone: () => go('productions') }); } }, icon('trash', 15)) : null);
   root.replaceChildren(h('div', { class: 'preprod' }, bar, view === 'concepts' ? concepts() : board()));
 }
 

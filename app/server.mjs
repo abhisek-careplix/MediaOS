@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { execFileSync } from 'child_process';
 import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
-import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog, runningJobs } from './lib/jobs.mjs';
+import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog, runningJobs, hold } from './lib/jobs.mjs';
 import { forPeople } from './lib/plain.mjs';
 import { startSync, syncNow, serveFromCloud } from './lib/storage.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
@@ -28,6 +28,7 @@ import { runAs, tag } from './lib/context.mjs';
 import { rolesOf, can } from './lib/team.mjs';
 import { overCap } from './lib/ledger.mjs';
 import { audit } from './lib/audit.mjs';
+import { plan as deletePlan, remove as deleteFilm, sweep } from './lib/removal.mjs';
 import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
 const PORT = +process.env.PORT || 5178;
@@ -81,6 +82,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
   '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.wav': 'audio/wav', '.srt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
 fs.mkdirSync(FILMS, { recursive: true });
+sweep();   // what a delete cut off by a restart left behind
 
 // —— helpers ——
 function send(res, code, body, type = 'application/json; charset=utf-8') {
@@ -172,7 +174,7 @@ function claudeStatus() {
 }
 
 function listFilms() {
-  return fs.readdirSync(FILMS).map(id => {
+  return fs.readdirSync(FILMS).filter(id => !id.startsWith('.')).map(id => {
     const dir = path.join(FILMS, id), meta = readMeta(dir);
     if (!meta) return null;
     const job = getJob(id);
@@ -603,6 +605,8 @@ async function api(req, res, url, user) {
     if (M === 'GET' && !parts[2]) {
       let content = null;
       try { content = JSON.parse(fs.readFileSync(path.join(dir, 'content.json'), 'utf8')); } catch {}
+      // a cut kept when its production was deleted no longer links back to it
+      if (meta?.production && !readMeta(filmDir(meta.production))) meta.production = null;
       return send(res, 200, { meta, content, job: getJob(id) ? { status: getJob(id).status, step: getJob(id).step, pct: getJob(id).pct } : null });
     }
     if (M === 'PUT' && parts[2] === 'content') {
@@ -654,6 +658,9 @@ async function api(req, res, url, user) {
       walk(dir, 0);
       return send(res, 200, files.sort((a, b) => a.mtime - b.mtime).slice(-600));
     }
+    // deleting it (a production with what was made from it): first what would go and what stays, then the delete
+    if (M === 'GET' && parts[2] === 'delete') return send(res, 200, deletePlan(id, user));
+    if (M === 'DELETE' && !parts[2]) return send(res, 200, deleteFilm(id, user));
     if (M === 'POST' && parts[2] === 'cancel') {
       const job = getJob(id);
       if (job) cancel(job);
@@ -716,7 +723,10 @@ const server = http.createServer(async (req, res) => {
       // roles and monthly caps first; then the request runs as this person, so the ledger and the audit trail know who
       const no = writeGate(req.method, p, user);
       if (no) return send(res, no.code, { error: no.error });
-      return await runAs(user, () => api(req, res, url, user));
+      // a write to one film or production holds it until answered, so a delete never takes the folder from under it
+      const one = !['GET', 'HEAD', 'DELETE'].includes(req.method) && /^\/api\/(?:films|productions|decks)\/([a-z0-9-]+)/.exec(p)?.[1];
+      const release = one ? hold(one) : null;
+      try { return await runAs(user, () => api(req, res, url, user)); } finally { release?.(); }
     }
     if (p.startsWith('/films/')) return serveFile(req, res, FILMS, p.slice('/films/'.length));
     if (p.startsWith('/fonts/')) return serveFile(req, res, FONTS, p.slice('/fonts/'.length));

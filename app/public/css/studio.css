@@ -804,3 +804,20 @@ details.hood pre { margin: 10px 0 0; max-height: 360px; overflow: auto; backgrou
   .tm-row { grid-template-columns: 30px 1fr 32px; } .tm-roles { grid-column: 2 / -1; grid-row: 2; }
   .sp-table { display: block; overflow-x: auto; }
 }
+
+/* deleting: the Library card's corner button, the confirmation and the Team page's disk use */
+.lcell { position: relative; display: grid; }
+.lc-del { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .55); color: #fff; backdrop-filter: blur(10px); opacity: 0; transition: opacity .2s, background .2s; }
+.lcell:hover .lc-del, .lc-del:focus-visible { opacity: 1; }
+.lc-del:hover { background: var(--red); }
+@media (hover: none) { .lc-del { opacity: 1; } }
+.btn.danger-fill { background: var(--red); color: #fff; }
+.btn.danger-fill:hover { background: #ff6961; }
+.del-sheet ul { margin: 6px 0 0; padding-left: 18px; color: var(--text2); font-size: 13px; }
+.del-sheet .spacer { flex: 1; }
+.du-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(60px, 160px) 64px 36px; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--sep); }
+.du-row a { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.du-bar { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+.du-bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue); }
+.du-size { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+@media (max-width: 760px) { .du-row { grid-template-columns: minmax(0, 1fr) 64px 36px; } .du-bar { display: none; } }

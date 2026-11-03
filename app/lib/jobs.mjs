@@ -33,6 +33,16 @@ export function startJob(id, dir, kind) {
   return job;
 }
 export const getJob = id => jobs.get(id);
+// a deleted film's finished job
+export const forgetJob = id => { if (jobs.get(id)?.status !== 'running') jobs.delete(id); };
+
+// requests still at work on a film (a frame redrawn, a voice sample, an edit saved): a delete waits for them as for a job
+const holds = new Map();
+export function hold(id) {
+  holds.set(id, (holds.get(id) || 0) + 1);
+  return () => { const n = holds.get(id) - 1; if (n > 0) holds.set(id, n); else holds.delete(id); };
+}
+export const held = id => holds.has(id);
 export const runningJobs = () => [...jobs.values()].filter(j => j.status === 'running');
 
 function snapshot(job) {
