@@ -1,13 +1,11 @@
 // Proof Library: the approved facts every asset may cite. Each entry is one claim with its source, owner, status,
-// expiry and disclaimer, stored in <root>/proof/proof.json. Only approved, unexpired entries reach Claude.
+// expiry and disclaimer, stored in the workspace's proof/proof.json. Only approved, unexpired entries reach Claude.
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { ROOT } from './paths.mjs';
+import { here } from './paths.mjs';
 
-export const PROOF = process.env.VIDEOGEN_PROOF || path.join(ROOT, 'proof');
-const FILE = path.join(PROOF, 'proof.json');
-fs.mkdirSync(PROOF, { recursive: true });
+const fileOf = () => path.join(here().proof, 'proof.json');
 
 const KINDS = ['stat', 'fact', 'quote'];
 const SOURCES = ['study', 'internal', 'customer', 'regulatory', 'web'];
@@ -15,12 +13,13 @@ const STATUSES = ['draft', 'approved', 'retired'];
 const bad = msg => Object.assign(new Error(msg), { code: 400 });
 
 function load() {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return []; }
+  try { return JSON.parse(fs.readFileSync(fileOf(), 'utf8')); } catch { return []; }
 }
 function store(list) {
-  const tmp = FILE + '.tmp';
+  const file = fileOf(), tmp = file + '.tmp';
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(tmp, JSON.stringify(list, null, 1));
-  fs.renameSync(tmp, FILE);
+  fs.renameSync(tmp, file);
 }
 
 const today = () => new Date().toISOString().slice(0, 10);

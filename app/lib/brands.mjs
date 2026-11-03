@@ -1,11 +1,11 @@
-// Brand kits: colours, type, logo, narrator and tone, stored in <root>/brands/<id>/brand.json.
-// Fonts are open-licence Google Fonts, fetched on first use into brands/_fonts with their OFL licence.
+// Brand kits: colours, type, logo, narrator and tone, stored in the workspace's brands/<id>/brand.json.
+// Fonts are open-licence Google Fonts, fetched on first use into the studio's shared cache (<platform>/fonts) with
+// their OFL licence: a font file is the same for everyone, and a kit only names which ones it uses.
 import fs from 'fs';
 import path from 'path';
-import { ROOT } from './paths.mjs';
+import { PLATFORM, here } from './paths.mjs';
 
-export const BRANDS = process.env.VIDEOGEN_BRANDS || path.join(ROOT, 'brands');
-export const FONTS = path.join(BRANDS, '_fonts');
+export const FONTS = path.join(PLATFORM, 'fonts');
 fs.mkdirSync(FONTS, { recursive: true });
 
 const RAW = 'https://raw.githubusercontent.com/google/fonts/main/ofl/';
@@ -63,14 +63,17 @@ const ROLES = ['bg', 'surface', 'ink', 'muted', 'accent'];
 const slug = s => String(s || 'brand').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'brand';
 const dirOf = id => {
   if (!/^[a-z0-9-]+$/.test(id) || id.startsWith('_')) throw Object.assign(new Error('bad brand id'), { code: 400 });
-  return path.join(BRANDS, id);
+  return path.join(here().brands, id);
 };
+export const brandDir = dirOf;
 
 export function readBrand(id) {
   try { return JSON.parse(fs.readFileSync(path.join(dirOf(id), 'brand.json'), 'utf8')); } catch { return null; }
 }
 export function listBrands() {
-  return fs.readdirSync(BRANDS).filter(d => !d.startsWith('_')).map(readBrand).filter(Boolean).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
+  let ids = [];
+  try { ids = fs.readdirSync(here().brands); } catch {}
+  return ids.filter(d => !d.startsWith('_') && !d.startsWith('.')).map(readBrand).filter(Boolean).sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
 }
 
 export async function saveBrand(input, id = null) {

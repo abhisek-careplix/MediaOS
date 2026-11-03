@@ -1,5 +1,5 @@
 // Brand kits: colours, type, logo, narrator and tone, previewed live in the real templates.
-import { $, $$, h, api, icon, toast, sheet, app, go, pillSelect, segmented } from './core.js';
+import { $, $$, h, api, icon, toast, sheet, app, go, pillSelect, segmented, wsHeader } from './core.js';
 
 const ROLES = [
   ['bg', 'Background', 'The stage or page behind everything'],
@@ -264,7 +264,7 @@ async function editor(id, presetId) {
     try {
       let b = isNew ? await api('brands', { method: 'POST', body: d }) : await api('brands/' + id, { method: 'PUT', body: d });
       if (logoFile) {
-        const r = await fetch(`/api/brands/${b.id}/logo`, { method: 'POST', headers: { 'Content-Type': logoFile.type }, body: logoFile });
+        const r = await fetch(`/api/brands/${b.id}/logo`, { method: 'POST', headers: { 'Content-Type': logoFile.type, ...wsHeader() }, body: logoFile });
         if (!r.ok) throw new Error((await r.json()).error);
       } else if (logoGone && saved?.logo) await api(`brands/${b.id}/logo`, { method: 'DELETE' });
       await loadBrands();

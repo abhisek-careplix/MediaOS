@@ -2,9 +2,9 @@
 // Checks flag unsupported numbers, stale proof, missing content and weak contrast before export.
 import fs from 'fs';
 import path from 'path';
-import { APP, FILMS } from './paths.mjs';
+import { APP } from './paths.mjs';
 import { askJSON } from './claude.mjs';
-import { readBrand, ensureFont, BRANDS } from './brands.mjs';
+import { readBrand, ensureFont, brandDir } from './brands.mjs';
 import { liveProof, listProof, proofForPrompt, unsupportedNumbers } from './proof.mjs';
 import { LAYOUTS, themeFrom, contrast, DEFAULT_THEME } from '../public/js/deck-render.js';
 import { writePptx } from './pptx.mjs';
@@ -192,7 +192,7 @@ export async function exportDeck(dir, deck, kinds = ['pptx', 'pdf'], { draft = f
   else await ensureFont('Inter');
   const proof = Object.fromEntries(listProof().map(e => [e.id, e]));
   const slug = (deck.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'deck';
-  const logoFile = brand?.logo ? path.join(BRANDS, brand.id, brand.logo) : null;
+  const logoFile = brand?.logo ? path.join(brandDir(brand.id), brand.logo) : null;
   const out = {};
   const r = await renderDeck(deck, theme, { proof, logoFile, draft, pdfFile: kinds.includes('pdf') ? path.join(dir, slug + '.pdf') : null, posterFile: path.join(dir, 'poster.jpg') });
   if (kinds.includes('pdf')) out.pdf = slug + '.pdf';
@@ -239,4 +239,3 @@ export function deckToScript(deck, template) {
 }
 
 export const isDeckDir = dir => fs.existsSync(deckFile(dir));
-export { FILMS };

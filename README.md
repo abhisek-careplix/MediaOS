@@ -39,7 +39,7 @@ Front-end code is in `app/public/js/` (one module per section) and `app/public/c
 
 ## Deploying
 
-To put it online now as an open site on Google Cloud (project careplix-labs): `./deploy/gcp-up.sh`. [DEPLOY.md](DEPLOY.md) covers that, a 2-minute tunnel from this Mac, and running it as a website for the team: a Docker image (`Dockerfile`), Caddy for HTTPS (`docker-compose.yml`, `Caddyfile`), Google sign-in limited to `@careplix.com` (`app/lib/auth.mjs`), and the settings in `.env.example`. Without those settings the app stays in local mode: localhost only, no sign-in.
+To put it online now as an open site on Google Cloud (project careplix-labs): `./deploy/gcp-up.sh`. [DEPLOY.md](DEPLOY.md) covers that, a 2-minute tunnel from this Mac, and running it as a website for the team: a Docker image (`Dockerfile`), Caddy for HTTPS (`docker-compose.yml`, `Caddyfile`), Google sign-in for the people in each customer's workspace (`app/lib/auth.mjs`, `app/lib/workspaces.mjs`), and the settings in `.env.example`. Without those settings the app stays in local mode: localhost only, no sign-in.
 
 ## Requirements
 

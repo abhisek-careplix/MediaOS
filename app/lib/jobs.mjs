@@ -1,12 +1,15 @@
 // In-memory job registry: each film has at most one running job; progress fans out to SSE listeners.
 // The latest state is mirrored into <film>/meta.json and every log line into <film>/log.jsonl,
-// so the library and a production's activity survive a restart.
+// so the library and a production's activity survive a restart. Jobs and holds are kept by workspace and id: a film id
+// asked about in one workspace never finds another workspace's job.
 import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { scrub } from './plain.mjs';
+import { current } from './context.mjs';
 
 const jobs = new Map();
+const key = id => { const ws = current().ws; if (!ws) throw Object.assign(new Error('This request has no workspace.'), { code: 500 }); return ws + '/' + id; };
 const BACKLOG = 2000;
 
 export function readMeta(dir) {
@@ -27,22 +30,23 @@ export function readLog(dir) {
 }
 
 export function startJob(id, dir, kind) {
-  const job = { id, dir, kind, status: 'running', step: '', pct: 0, log: [], listeners: new Set(), proc: null, started: Date.now(), output: null, error: null };
-  jobs.set(id, job);
+  const job = { id, ws: current().ws, dir, kind, status: 'running', step: '', pct: 0, log: [], listeners: new Set(), proc: null, started: Date.now(), output: null, error: null };
+  jobs.set(key(id), job);
   try { fs.appendFileSync(path.join(dir, 'log.jsonl'), JSON.stringify({ t: 0, line: `── ${kind} started ${new Date().toISOString()}` }) + '\n'); } catch {}
   return job;
 }
-export const getJob = id => jobs.get(id);
+export const getJob = id => jobs.get(key(id));
 // a deleted film's finished job
-export const forgetJob = id => { if (jobs.get(id)?.status !== 'running') jobs.delete(id); };
+export const forgetJob = id => { if (jobs.get(key(id))?.status !== 'running') jobs.delete(key(id)); };
 
 // requests still at work on a film (a frame redrawn, a voice sample, an edit saved): a delete waits for them as for a job
 const holds = new Map();
 export function hold(id) {
-  holds.set(id, (holds.get(id) || 0) + 1);
-  return () => { const n = holds.get(id) - 1; if (n > 0) holds.set(id, n); else holds.delete(id); };
+  const k = key(id);
+  holds.set(k, (holds.get(k) || 0) + 1);
+  return () => { const n = holds.get(k) - 1; if (n > 0) holds.set(k, n); else holds.delete(k); };
 }
-export const held = id => holds.has(id);
+export const held = id => holds.has(key(id));
 export const runningJobs = () => [...jobs.values()].filter(j => j.status === 'running');
 
 function snapshot(job) {

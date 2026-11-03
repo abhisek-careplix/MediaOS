@@ -17,8 +17,11 @@ export function h(tag, attrs = {}, ...kids) {
   return e;
 }
 
+// the workspace this page shows, sent with every request: after a switch in another tab the server refuses the request
+// instead of sending it to the other workspace
+export const wsHeader = () => app.me?.workspace ? { 'X-Workspace': app.me.workspace.id } : {};
 export async function api(path, opts = {}) {
-  const r = await fetch('/api/' + path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const r = await fetch('/api/' + path, { ...opts, headers: { 'Content-Type': 'application/json', ...wsHeader(), ...opts.headers }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) {
     location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search + location.hash);

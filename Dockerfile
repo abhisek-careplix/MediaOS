@@ -39,8 +39,12 @@ WORKDIR /home/app/videogen
 # the app's own packages (PowerPoint export)
 RUN cd app && npm ci --omit=dev --no-audit --no-fund && rm -rf /home/app/.npm
 
+# each workspace's data in /data/workspaces/<id>, the studio's own in /data/platform; the five folders below are where
+# the data lived before workspaces, moved into /data/workspaces/careplix on the first start
 ENV HOST=0.0.0.0 \
     PORT=5178 \
+    VIDEOGEN_WORKSPACES=/data/workspaces \
+    VIDEOGEN_PLATFORM=/data/platform \
     VIDEOGEN_FILMS=/data/films \
     VIDEOGEN_BRANDS=/data/brands \
     VIDEOGEN_PROOF=/data/proof \

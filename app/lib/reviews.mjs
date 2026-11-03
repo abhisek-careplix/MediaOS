@@ -3,11 +3,11 @@
 // different person from the one who submitted it and from each other, with their typed name against a statement and
 // the version's fingerprint. The claims check runs as soon as it is submitted; MLR cannot approve while a flagged item
 // is open (fixed in a new version, or accepted with a written reason). An approval lapses on its own if a Proof Library
-// entry it relied on later changes. Everything is in <governance>/reviews/<id>/ and the audit trail.
+// entry it relied on later changes. Everything is in the workspace's governance/reviews/<id>/ and its audit trail.
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { FILMS, GOV } from './paths.mjs';
+import { here } from './paths.mjs';
 import { readMeta, writeMeta } from './jobs.mjs';
 import { readDeck } from './decks.mjs';
 import { linesOfFilm, linesOfDeck, runChecks, proofDrift } from './checks.mjs';
@@ -15,7 +15,7 @@ import { can, ROLES } from './team.mjs';
 import { audit } from './audit.mjs';
 import { tag } from './context.mjs';
 
-export const REVIEWS = path.join(GOV, 'reviews');
+const reviewsDir = () => path.join(here().governance, 'reviews');
 export const STEPS = ['lead', 'reviewer', 'budget'];
 export const STATEMENTS = {
   lead: 'I have reviewed this version for brand and creative quality.',
@@ -25,7 +25,7 @@ export const STATEMENTS = {
 const err = (msg, code = 400) => Object.assign(new Error(msg), { code });
 const now = () => new Date().toISOString();
 const stamp = () => now().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
-const dirOf = id => { if (!/^r-[a-z0-9-]+$/.test(id)) throw err('bad review id'); return path.join(REVIEWS, id); };
+const dirOf = id => { if (!/^r-[a-z0-9-]+$/.test(id)) throw err('bad review id'); return path.join(reviewsDir(), id); };
 
 export function loadReview(id) {
   try { return JSON.parse(fs.readFileSync(path.join(dirOf(id), 'review.json'), 'utf8')); } catch { throw err('No such review.', 404); }
@@ -37,8 +37,8 @@ function save(r) {
   return r;
 }
 function all() {
-  if (!fs.existsSync(REVIEWS)) return [];
-  return fs.readdirSync(REVIEWS).filter(d => d.startsWith('r-')).map(id => { try { return loadReview(id); } catch { return null; } }).filter(Boolean);
+  if (!fs.existsSync(reviewsDir())) return [];
+  return fs.readdirSync(reviewsDir()).filter(d => d.startsWith('r-')).map(id => { try { return loadReview(id); } catch { return null; } }).filter(Boolean);
 }
 
 // an approved version whose proof has moved on is no longer approved: record that once, when first seen
@@ -94,8 +94,10 @@ export function viewReview(id, user) {
 // exported films and decks that can go up for review
 export function candidates() {
   const busy = new Map(all().filter(r => ['in-review', 'changes'].includes(r.status)).map(r => [r.asset.id, r]));
-  return fs.readdirSync(FILMS).map(id => {
-    const dir = path.join(FILMS, id), m = id.startsWith('.') ? null : readMeta(dir);
+  const films = here().films;
+  if (!fs.existsSync(films)) return [];
+  return fs.readdirSync(films).map(id => {
+    const dir = path.join(films, id), m = id.startsWith('.') ? null : readMeta(dir);
     if (!m) return null;
     const file = m.mode === 'deck' ? m.files?.pdf : m.status === 'done' ? m.output : null;
     if (!file || !fs.existsSync(path.join(dir, file))) return null;
@@ -106,7 +108,7 @@ export function candidates() {
 
 export function submit(assetId, note, user) {
   if (!/^[a-z0-9-]+$/.test(String(assetId))) throw err('Pick something to review.');
-  const dir = path.join(FILMS, assetId), m = readMeta(dir);
+  const dir = path.join(here().films, assetId), m = readMeta(dir);
   if (!m) throw err('That film or deck no longer exists.', 404);
   const deck = m.mode === 'deck';
   const file = deck ? m.files?.pdf : m.output;
@@ -194,7 +196,7 @@ export function decide(id, role, { decision, note, signature } = {}, user) {
     r.status = 'approved';
     r.approvedAt = now();
     audit('review.approved', { target: id, detail: { asset: r.asset.id, version: r.version.n, sha256: r.version.hash } });
-    const dir = path.join(FILMS, r.asset.id), m = readMeta(dir);
+    const dir = path.join(here().films, r.asset.id), m = readMeta(dir);
     if (m) writeMeta(dir, { ...m, approval: { review: id, version: r.version.n, at: r.approvedAt } });
   }
   return save(r);

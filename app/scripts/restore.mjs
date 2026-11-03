@@ -2,11 +2,14 @@
 //   node app/scripts/restore.mjs           fetch what's missing
 //   node app/scripts/restore.mjs --dry     list what would be fetched
 //   node app/scripts/restore.mjs --force   also replace files whose size differs from the stored copy
+//   node app/scripts/restore.mjs --workspace <id>   only that workspace's files
 // On the VM:  cd ~/videogen && sudo docker compose exec videogen node app/scripts/restore.mjs
 import '../lib/localenv.mjs';
 import { restore, storageOn } from '../lib/storage.mjs';
 
 if (!storageOn()) { console.error('MEDIA_BUCKET is not set: there is nothing to restore from.'); process.exit(1); }
 const dry = process.argv.includes('--dry'), force = process.argv.includes('--force');
-const r = await restore({ dry, force });
+const at = process.argv.indexOf('--workspace'), workspace = at > 0 ? process.argv[at + 1] : null;
+if (at > 0 && !workspace) { console.error('Name the workspace: --workspace <id>'); process.exit(1); }
+const r = await restore({ dry, force, workspace });
 console.log(`${r.objects} stored files: ${dry ? 'would fetch' : 'fetched'} ${r.fetched} (${(r.bytes / 1e6).toFixed(1)} MB), ${r.kept} already on disk.`);

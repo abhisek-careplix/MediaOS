@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Turn Google sign-in (CarePlix accounts only) on for the live VideoGen server, or off again.
+# Turn Google sign-in on for the live VideoGen server, or off again. Who may sign in is decided by the studio's
+# workspaces (DEPLOY.md, "Workspaces"); DOMAINS become the CarePlix workspace's domains when it is first set up.
 #
 #   ./deploy/gcp-signin.sh          asks for the OAuth client ID and secret (the secret is not shown), then turns sign-in on
 #   ./deploy/gcp-signin.sh --off    back to an open site with no sign-in

@@ -6,12 +6,13 @@
 // bucket on its next pass, and the bucket keeps them for 30 days.
 import fs from 'fs';
 import path from 'path';
-import { FILMS } from './paths.mjs';
+import { WORKSPACES, here } from './paths.mjs';
 import { getJob, forgetJob, held, readMeta, writeMeta } from './jobs.mjs';
 import { reviewsOf } from './reviews.mjs';
 import { can } from './team.mjs';
 import { audit } from './audit.mjs';
 import { storageOn, deletedOnPurpose, syncNow } from './storage.mjs';
+import { listWorkspaces } from './workspaces.mjs';
 
 const err = (msg, code = 400) => Object.assign(new Error(msg), { code });
 // a folder on its way out is renamed first, so no listing ever sees half of it
@@ -36,7 +37,9 @@ export function sizeOf(dir) {
   return { bytes, files };
 }
 
-const folders = () => fs.readdirSync(FILMS).filter(id => !id.startsWith('.')).map(id => ({ id, meta: readMeta(path.join(FILMS, id)) })).filter(f => f.meta);
+// everything here is in this request's workspace: an id from another one isn't found
+const filmsDir = () => here().films;
+const folders = () => { const F = filmsDir(); return (fs.existsSync(F) ? fs.readdirSync(F) : []).filter(id => !id.startsWith('.')).map(id => ({ id, meta: readMeta(path.join(F, id)) })).filter(f => f.meta); };
 // an admin, or the person who made it while they still make things here (view-only people delete nothing)
 const mayDelete = (user, m) => !user.guest && (can(user, 'admin') || (can(user, 'creator') && !!m.owner && m.owner === user.email));
 // in review, or signed off at any step (a lapsed approval included)
@@ -50,7 +53,7 @@ function guard(id, m) {
 // what deleting it would remove and keep, and why it can't be deleted now if it can't
 export function plan(id, user) {
   if (!/^[a-z0-9-]+$/.test(String(id))) throw err('bad film id');
-  const m = readMeta(path.join(FILMS, id));
+  const FILMS = filmsDir(), m = readMeta(path.join(FILMS, id));
   if (!m) throw err('No such film.', 404);
   const kind = kindOf(m), also = [], kept = [];
   if (kind === 'production') for (const f of folders().filter(f => f.meta.production === id)) {
@@ -74,12 +77,12 @@ export function plan(id, user) {
 export function remove(id, user) {
   const p = plan(id, user);
   if (p.blocked) throw err(p.blocked.error, p.blocked.code);
-  const ids = [...p.also.map(f => f.id), id], moved = [], meta = readMeta(path.join(FILMS, id));
-  for (const x of ids) deletedOnPurpose('films', x);
+  const FILMS = filmsDir(), ids = [...p.also.map(f => f.id), id], moved = [], meta = readMeta(path.join(FILMS, id));
+  for (const x of ids) deletedOnPurpose(FILMS, x);
   try { for (const x of ids) { fs.renameSync(path.join(FILMS, x), path.join(FILMS, TRASH + x)); moved.push(x); } }
   catch (e) {
     for (const x of moved) try { fs.renameSync(path.join(FILMS, TRASH + x), path.join(FILMS, x)); } catch {}
-    for (const x of ids) deletedOnPurpose('films', x, false);
+    for (const x of ids) deletedOnPurpose(FILMS, x, false);
     throw e;
   }
   audit(`${p.kind}.deleted`, { target: id, detail: { title: p.title, owner: p.owner, bytes: p.bytes, files: p.files, also: p.also.map(f => f.id), kept: p.kept.map(f => ({ id: f.id, why: f.why })) } });
@@ -92,14 +95,18 @@ export function remove(id, user) {
   return { ...p, deleted: ids };
 }
 
-// folders a delete was interrupted in the middle of removing (a restart, say)
+// folders a delete was interrupted in the middle of removing (a restart, say), in every workspace
 export function sweep() {
-  for (const n of fs.readdirSync(FILMS)) if (n.startsWith(TRASH)) fs.rmSync(path.join(FILMS, n), { recursive: true, force: true });
+  for (const w of listWorkspaces()) {
+    const F = path.join(WORKSPACES, w.id, 'films');
+    if (fs.existsSync(F)) for (const n of fs.readdirSync(F)) if (n.startsWith(TRASH)) fs.rmSync(path.join(F, n), { recursive: true, force: true });
+  }
 }
 
-// the disk each production (with what was made from it), film and deck takes, largest first: for admins on the Team page
+// the disk each of this workspace's productions (with what was made from it), films and decks takes, largest first: for
+// its admins on the Team page
 export function diskUse() {
-  const all = folders(), items = new Map();
+  const FILMS = filmsDir(), all = folders(), items = new Map();
   for (const f of all) items.set(f.id, { id: f.id, kind: kindOf(f.meta), mode: f.meta.mode, title: titleOf(f.meta), owner: f.meta.owner || null, ownerName: f.meta.ownerName || null, created: f.meta.created, made: 0, ...sizeOf(path.join(FILMS, f.id)) });
   for (const f of all) {
     const p = f.meta.production && items.get(f.meta.production), x = items.get(f.id);

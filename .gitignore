@@ -1,4 +1,7 @@
-# generated films and brand kits (they live on the server's /data volume)
+# generated films and brand kits (they live on the server's /data volume): each workspace's, the studio's own, and the
+# folders from before workspaces
+workspaces/
+platform/
 films/
 brands/
 proof/

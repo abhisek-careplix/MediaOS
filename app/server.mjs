@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { execFileSync } from 'child_process';
-import { APP, FILMS, LIB, UPLOADS } from './lib/paths.mjs';
+import { APP, LIB, WORKSPACES, here } from './lib/paths.mjs';
 import { TEMPLATES, VOICES, libraryStyles } from './lib/templates.mjs';
 import { startJob, getJob, emit, subscribe, cancel, readMeta, writeMeta, readLog, runningJobs, hold } from './lib/jobs.mjs';
 import { forPeople } from './lib/plain.mjs';
@@ -14,7 +14,7 @@ import { startSync, syncNow, serveFromCloud } from './lib/storage.mjs';
 import { renderQuick } from './lib/pipeline.mjs';
 import { studioVoiceList, isStudioVoice, STUDIO_VOICES, studioReady, speak } from './lib/voice.mjs';
 import { writeScript, runDirector, writeBrand } from './lib/claude.mjs';
-import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, logout } from './lib/auth.mjs';
+import { AUTH, authOn, configProblems, currentUser, startLogin, finishLogin, logout, cookies, cookie } from './lib/auth.mjs';
 import { writeOutline, writeDeck, rewriteSlide, checkDeck, readDeck, saveDeck, sampleDeck, exportDeck, deckToScript, AUDIENCES } from './lib/decks.mjs';
 import { LAYOUTS } from './public/js/deck-render.js';
 import { listProof, addProof, updateProof, deleteProof, importCSV, searchPubMed } from './lib/proof.mjs';
@@ -24,13 +24,14 @@ import { queueOutcome } from './lib/fal.mjs';
 import { soundReady } from './lib/sound.mjs';
 import { engines, ENGINES } from './lib/video.mjs';
 import { vertexStatus } from './lib/vertex.mjs';
-import { governApi, writeGate, GOVERNED } from './lib/govern.mjs';
-import { runAs, tag } from './lib/context.mjs';
-import { rolesOf, can } from './lib/team.mjs';
+import { governApi, writeGate, GOVERNED, WS_COOKIE } from './lib/govern.mjs';
+import { runAs, tag, current } from './lib/context.mjs';
+import { rolesOf, can, workspacesOf, isOperator } from './lib/team.mjs';
+import { migrate, getWorkspace } from './lib/workspaces.mjs';
 import { overCap, followUp } from './lib/ledger.mjs';
 import { audit } from './lib/audit.mjs';
 import { plan as deletePlan, remove as deleteFilm, sweep } from './lib/removal.mjs';
-import { BRANDS, FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
+import { FONTS, FONT_LIST, PRESETS, listBrands, readBrand, saveBrand, saveLogo, removeLogo, deleteBrand, ensureFont, brandIntoFilm, brandForPreview } from './lib/brands.mjs';
 
 const PORT = +process.env.PORT || 5178;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -70,10 +71,10 @@ function limited(res, req, bucket, claude = false) {
 if (configProblems().length) { console.error('Sign-in is misconfigured:\n  - ' + configProblems().join('\n  - ')); process.exit(1); }
 const SIZES = { '16:9': '1920x1080', '9:16': '1080x1920' };
 const KINDS = ['film', 'ad', 'reel'];
-// ids from POST /api/uploads → their files (at most 4)
+// ids from POST /api/uploads → their files (at most 4), in this workspace's uploads
 function uploaded(list) {
   return (Array.isArray(list) ? list : []).slice(0, 4).map(id => {
-    const file = path.join(UPLOADS, String(id));
+    const file = path.join(here().uploads, String(id));
     if (!/^[0-9a-f]{20}\.(png|jpg|webp)$/.test(String(id)) || !fs.existsSync(file)) throw Object.assign(new Error('An attached image is missing. Attach it again.'), { code: 400 });
     return file;
   });
@@ -82,7 +83,8 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ttf': 'font/ttf', '.woff2': 'font/woff2',
   '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.wav': 'audio/wav', '.srt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
-fs.mkdirSync(FILMS, { recursive: true });
+// the first start after workspaces arrived moves the data into the CarePlix workspace; a problem stops the start
+try { migrate(); } catch (e) { console.error('Workspaces: ' + e.message); process.exit(1); }
 sweep();   // what a delete cut off by a restart left behind
 
 // —— helpers ——
@@ -125,10 +127,13 @@ function serveFile(req, res, root, rel) {
   });
 }
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+// a film, deck or production of this request's workspace (one of another workspace isn't found)
 const filmDir = id => {
   if (!/^[a-z0-9-]+$/.test(id)) throw Object.assign(new Error('bad film id'), { code: 400 });
-  return path.join(FILMS, id);
+  return path.join(here().films, id);
 };
+// a brand kit named in a request must be this workspace's, checked before any paid work starts
+const noBrand = (res, id) => id && !readBrand(id) ? (send(res, 404, { error: 'No such brand kit.' }), true) : false;
 
 // a quick-mode film folder: the template page + runtime + fonts, ready for content.json
 function createQuickFilm({ template, aspect, prompt, voice, narration, model, brandId, owner, kind }) {
@@ -161,7 +166,8 @@ function saveContent(dir, script, template, brand, media) {
   return content;
 }
 
-const canDirect = user => MAX_DIRECTORS > 0 && (!authOn() || !DIRECTOR_USERS.length || DIRECTOR_USERS.includes(user.email));
+// Director's agent can read the server's disk, so it runs only in workspaces where an operator turned it on
+const canDirect = user => MAX_DIRECTORS > 0 && !!getWorkspace(current().ws)?.director && (!authOn() || !DIRECTOR_USERS.length || DIRECTOR_USERS.includes(user.email));
 
 // whether the AI writer is installed: checked at most once a minute, since starting it holds up every other request
 let writer = null;
@@ -175,8 +181,10 @@ function claudeStatus() {
 }
 
 function listFilms() {
-  return fs.readdirSync(FILMS).filter(id => !id.startsWith('.')).map(id => {
-    const dir = path.join(FILMS, id), meta = readMeta(dir);
+  const F = here().films;
+  if (!fs.existsSync(F)) return [];
+  return fs.readdirSync(F).filter(id => !id.startsWith('.')).map(id => {
+    const dir = path.join(F, id), meta = readMeta(dir);
     if (!meta) return null;
     const job = getJob(id);
     const status = job?.status === 'running' ? 'running' : meta.status === 'running' ? 'interrupted' : meta.status;
@@ -201,11 +209,15 @@ async function api(req, res, url, user) {
   if (M === 'GET' && parts[0] === 'config') {
     return send(res, 200, {
       templates: Object.values(TEMPLATES).filter(t => !t.hidden).map(({ id, name, blurb, accents }) => ({ id, name, blurb, accents })),
-      voices: [...studioVoiceList(), ...VOICES], styles: libraryStyles(), claude: claudeStatus(), lib: LIB, films: FILMS,
+      voices: [...studioVoiceList(), ...VOICES], styles: libraryStyles(), claude: claudeStatus(), lib: LIB, films: here().films,
       libReady: fs.existsSync(path.join(LIB, 'core/render/video.mjs')), voiceReady: fs.existsSync(path.join(LIB, 'core/tts/kokoro-v1.0.onnx')),
     });
   }
-  if (M === 'GET' && parts[0] === 'me') return send(res, 200, { ...user, auth: authOn(), open: OPEN, domains: AUTH.domains, canDirect: canDirect(user), roles: rolesOf(user) });
+  if (M === 'GET' && parts[0] === 'me') {
+    const w = getWorkspace(current().ws);
+    return send(res, 200, { ...user, auth: authOn(), open: OPEN, canDirect: canDirect(user), roles: rolesOf(user), operator: isOperator(user),
+      workspace: { id: w.id, name: w.name, domains: w.domains, director: w.director }, workspaces: workspacesOf(user) });
+  }
   // team, reviews and sign-offs, spend and caps, the audit trail
   if (GOVERNED.has(parts[0])) return governApi(req, res, parts, url, user, { send, body, serveFile });
   if (M === 'GET' && parts[0] === 'films' && !parts[1]) return send(res, 200, listFilms());
@@ -221,6 +233,7 @@ async function api(req, res, url, user) {
       const b = await body(req);
       if (!String(b.brief || '').trim()) return send(res, 400, { error: 'Write a brief first.' });
       if (!FORMATS[b.format]) return send(res, 400, { error: 'Pick a format.' });
+      if (noBrand(res, b.brandId)) return;
       const photos = uploaded(b.media), looks = uploaded(b.refs);
       if (limited(res, req, 'script', true)) return;
       const id = `p-${stamp()}-${Math.random().toString(36).slice(2, 6)}`, dir = filmDir(id);
@@ -442,6 +455,7 @@ async function api(req, res, url, user) {
     const magic = { '.png': buf.subarray(0, 4).toString('hex') === '89504e47', '.jpg': buf.subarray(0, 3).toString('hex') === 'ffd8ff', '.webp': buf.subarray(8, 12).toString() === 'WEBP' }[ext];
     if (!magic) return send(res, 400, { error: 'That file is not a valid image.' });
     const id = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 20) + ext;
+    const UPLOADS = here().uploads;
     fs.mkdirSync(UPLOADS, { recursive: true });
     if (!fs.existsSync(path.join(UPLOADS, id))) fs.writeFileSync(path.join(UPLOADS, id), buf);
     return send(res, 200, { id, url: '/uploads/' + id });
@@ -452,6 +466,7 @@ async function api(req, res, url, user) {
     const b = await body(req);
     if (!b.sample && limited(res, req, 'script', true)) return;
     if (!TEMPLATES[b.template]) return send(res, 400, { error: 'unknown template' });
+    if (noBrand(res, b.brandId)) return;
     const photos = b.sample ? [] : uploaded(b.media);
     let script, info = {};
     if (b.sample) {
@@ -484,8 +499,10 @@ async function api(req, res, url, user) {
   if (M === 'POST' && parts[0] === 'director') {
     const b = await body(req);
     if (!String(b.prompt || '').trim()) return send(res, 400, { error: 'Write a prompt first.' });
-    if (!canDirect(user)) return send(res, 403, { error: MAX_DIRECTORS === 0 ? 'Director mode is turned off on this server.' : 'Director mode is limited to a few people on this server. Ask an admin to add you to DIRECTOR_USERS.' });
-    const running = listFilms().filter(f => f.mode === 'director' && f.status === 'running').length;
+    if (!canDirect(user)) return send(res, 403, { error: MAX_DIRECTORS === 0 ? 'Director mode is turned off on this server.' : !getWorkspace(current().ws)?.director ? 'Director mode isn’t on for this workspace.' : 'Director mode is limited to a few people on this server. Ask an admin to add you to DIRECTOR_USERS.' });
+    if (noBrand(res, b.brandId)) return;
+    // the server's Director slots are shared by every workspace
+    const running = runningJobs().filter(j => j.kind === 'director').length;
     if (running >= MAX_DIRECTORS) return send(res, 429, { error: `${running} production${running > 1 ? 's are' : ' is'} already running; this server runs ${MAX_DIRECTORS} at a time. Try again when it finishes.` });
     const style = libraryStyles().find(s => s.slug === b.style);
     if (!style) return send(res, 400, { error: 'Pick a style.' });
@@ -506,11 +523,13 @@ async function api(req, res, url, user) {
     if (M === 'GET' && parts[1] === 'meta') return send(res, 200, { layouts: LAYOUTS, audiences: AUDIENCES });
     if (M === 'POST' && parts[1] === 'outline') {
       const b = await body(req);
+      if (noBrand(res, b.brandId)) return;
       if (limited(res, req, 'script', true)) return;
       return send(res, 200, await writeOutline({ brief: b.brief, audience: b.audience, count: Math.min(16, Math.max(3, +b.count || 8)), brandId: b.brandId, model: b.model }));
     }
     if (M === 'POST' && !parts[1]) {
       const b = await body(req);
+      if (noBrand(res, b.brandId)) return;
       let deck, cost = null;
       if (b.sample) deck = { ...sampleDeck(), brandId: b.brandId || null };
       else {
@@ -529,7 +548,9 @@ async function api(req, res, url, user) {
     if (!fs.existsSync(path.join(dir, 'deck.json'))) return send(res, 404, { error: 'no such deck' });
     if (M === 'GET' && !parts[2]) { const deck = readDeck(dir); return send(res, 200, { meta: readMeta(dir), deck, issues: checkDeck(deck) }); }
     if (M === 'PUT' && !parts[2]) {
-      const deck = saveDeck(dir, await body(req));
+      const b = await body(req);
+      if (noBrand(res, b.brandId)) return;
+      const deck = saveDeck(dir, b);
       writeMeta(dir, { ...readMeta(dir), title: deck.title, brandId: deck.brandId, audience: deck.audience });
       return send(res, 200, { deck, issues: checkDeck(deck) });
     }
@@ -684,6 +705,7 @@ async function api(req, res, url, user) {
 
 // paths a signed-out visitor may load: the login page and what it shows
 const PUBLIC = p => p === '/login' || p.startsWith('/auth/') || p === '/css/studio.css' || p.startsWith('/gallery/frames/') || p.startsWith('/img/') || p === '/favicon.ico';
+const wsCookie = id => cookie(WS_COOKIE, id, 400 * 86400);
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -700,16 +722,26 @@ const server = http.createServer(async (req, res) => {
       if (p === '/auth/google') return startLogin(res, url.searchParams.get('next'));
       if (p === '/auth/google/callback') return await finishLogin(req, res, url);
       if (p === '/auth/logout') return logout(res);
-      if (p === '/auth/info') return send(res, 200, { domains: AUTH.domains });
     }
+    // the sign-in page, unless this person is signed in and in a workspace
+    const user = OPEN ? GUEST : currentUser(req);
+    const mine = user ? workspacesOf(user) : [];
     if (p === '/login') {
-      if (!authOn() || currentUser(req)) { res.writeHead(302, { Location: '/' }); return res.end(); }
+      if (!authOn() || mine.length) { res.writeHead(302, { Location: '/' }); return res.end(); }
       return serveFile(req, res, path.join(APP, 'public'), 'login.html');
     }
-    const user = OPEN ? GUEST : currentUser(req);
-    if (!user && !PUBLIC(p)) {
-      if (p.startsWith('/api/')) return send(res, 401, { error: 'Sign in required', login: '/login' });
-      res.writeHead(302, { Location: '/login?next=' + encodeURIComponent(p + url.search), 'Cache-Control': 'no-store' });
+    if (!user) {
+      if (!PUBLIC(p)) {
+        if (p.startsWith('/api/')) return send(res, 401, { error: 'Sign in required', login: '/login' });
+        res.writeHead(302, { Location: '/login?next=' + encodeURIComponent(p + url.search), 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      return serveFile(req, res, path.join(APP, 'public'), p.slice(1));
+    }
+    // signed in but in no workspace (removed from the last one): signed out, and told why
+    if (!mine.length) {
+      if (p.startsWith('/api/')) return send(res, 403, { error: 'Your account isn’t in any workspace of this studio any more. Ask your workspace’s admin to add you.', login: '/login?error=not-invited' });
+      res.writeHead(302, { Location: '/login?error=not-invited', 'Set-Cookie': cookie('vg_session', '', 0), 'Cache-Control': 'no-store' });
       return res.end();
     }
     // writes must come from the site itself
@@ -717,23 +749,43 @@ const server = http.createServer(async (req, res) => {
       const origin = req.headers.origin;
       if (origin && origin !== AUTH.publicURL && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return send(res, 403, { error: 'Cross-site request refused' });
     }
+    // the workspace this request works in: the one the browser last chose if this person is (still) in it, else their
+    // first. Everything after this reads and writes that workspace's folders only.
+    const chosen = cookies(req)[WS_COOKIE], ws = mine.find(w => w.id === chosen) || mine[0];
+    if (ws.id !== chosen) res.setHeader('Set-Cookie', wsCookie(ws.id));
+    // the page says which workspace it is showing: after a switch in another tab its requests are refused, never sent
+    // to the other workspace
+    const said = req.headers['x-workspace'];
+    if (p.startsWith('/api/') && said && said !== ws.id) {
+      if (!mine.some(w => w.id === said)) return send(res, 403, { error: 'You aren’t in that workspace.' });
+      return send(res, 409, { error: `You switched to ${ws.name} in another tab. Reload this page to work there.`, reload: true });
+    }
+    return await runAs(user, ws.id, () => serve(req, res, url, user));
+  } catch (e) {
+    if (!res.headersSent) send(res, [400, 402, 403, 404, 409, 429].includes(e.code) ? e.code : 500, { error: forPeople(e) });
+  }
+});
 
+// a signed-in request, inside its workspace
+async function serve(req, res, url, user) {
+  const p = url.pathname;
+  try {
     if (p.startsWith('/api/')) {
       // while a deploy waits for running work to finish, nothing new starts (comments and sign-offs still go through)
       if (draining && req.method === 'POST' && !GOVERNED.has(p.split('/')[2])) return send(res, 503, { error: 'The studio is updating. Running work is finishing first; try again in a few minutes.' });
-      // roles and monthly caps first; then the request runs as this person, so the ledger and the audit trail know who
+      // roles and monthly caps first; the ledger and the audit trail know who and which workspace from the request
       const no = writeGate(req.method, p, user);
       if (no) return send(res, no.code, { error: no.error });
       // a write to one film or production holds it until answered, so a delete never takes the folder from under it
       const one = !['GET', 'HEAD', 'DELETE'].includes(req.method) && /^\/api\/(?:films|productions|decks)\/([a-z0-9-]+)/.exec(p)?.[1];
       const release = one ? hold(one) : null;
-      try { return await runAs(user, () => api(req, res, url, user)); } finally { release?.(); }
+      try { return await api(req, res, url, user); } finally { release?.(); }
     }
-    if (p.startsWith('/films/')) return serveFile(req, res, FILMS, p.slice('/films/'.length));
+    if (p.startsWith('/films/')) return serveFile(req, res, here().films, p.slice('/films/'.length));
     if (p.startsWith('/fonts/')) return serveFile(req, res, FONTS, p.slice('/fonts/'.length));
-    if (p.startsWith('/uploads/')) return serveFile(req, res, UPLOADS, p.slice('/uploads/'.length));
+    if (p.startsWith('/uploads/')) return serveFile(req, res, here().uploads, p.slice('/uploads/'.length));
     if (p === '/shared/logo.js') return serveFile(req, res, path.join(APP, 'templates', 'shared'), 'logo.js');
-    if (p.startsWith('/brands/') && !p.endsWith('.json')) return serveFile(req, res, BRANDS, p.slice('/brands/'.length));
+    if (p.startsWith('/brands/') && !p.endsWith('.json')) return serveFile(req, res, here().brands, p.slice('/brands/'.length));
     if (p.startsWith('/tpl/')) {
       // a template page outside any film, for live brand previews: /tpl/<template>/<file>
       const [, , tid, ...rest] = p.split('/');
@@ -746,8 +798,8 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     if (!res.headersSent) send(res, [400, 402, 403, 404, 409, 429].includes(e.code) ? e.code : 500, { error: forPeople(e) });
   }
-});
-server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? `Google sign-in for ${AUTH.domains.join(', ')}` : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, films: ${FILMS})`));
+}
+server.listen(PORT, HOST, () => console.log(`CarePlix Studio running at ${AUTH.publicURL || `http://localhost:${PORT}`}  (${authOn() ? 'Google sign-in for the workspaces’ members' : OPEN ? `OPEN to everyone, no sign-in; Director off; limits per hour: ${LIMITS.script} scripts and ${LIMITS.render} exports per visitor, ${LIMITS.claude} Claude calls site-wide` : 'local mode, no sign-in'}; library: ${LIB}, workspaces: ${WORKSPACES})`));
 startSync();
 // paid work given up on, settled once its service says how it ended
 followUp({ queue: queueOutcome, veo: veoOutcome });

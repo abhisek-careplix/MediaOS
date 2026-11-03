@@ -24,12 +24,11 @@
   h1 img { height: 42px; width: auto; display: block; }
   h1 span { font-size: 12.5px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; color: #6e6e73; padding-left: .34em; }
   .lead { margin: -2px 0 8px; color: #6e6e73; font-size: 15px; line-height: 1.45; }
-  /* "Sign in with CarePlix", shaped like the familiar sign-in buttons; it starts the Google sign-in for CarePlix accounts */
+  /* "Sign in with Google", shaped like the familiar sign-in buttons; it lets in people a workspace here added */
   .signin { display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; border-radius: 980px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font: 500 15.5px/1 -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif; text-decoration: none; transition: transform .2s cubic-bezier(.34, 1.4, .64, 1), box-shadow .2s, background .2s; }
   .signin:hover { background: #f8f9fb; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(16, 24, 40, .14); }
   .signin:active { transform: scale(.98); }
   .signin:focus-visible { outline: 3px solid rgba(47, 151, 240, .45); outline-offset: 2px; }
-  .signin img { height: 19px; width: auto; display: block; margin-top: 1px; }
   .who { color: #86868b; font-size: 12.5px; line-height: 1.5; }
   .who b { color: #3a3a3c; font-weight: 600; }
   .msg { border-radius: 14px; padding: 11px 14px; font-size: 13px; text-align: left; display: flex; gap: 10px; align-items: flex-start; }
@@ -44,12 +43,12 @@
 <main class="center">
   <div class="card">
     <h1><img src="/img/careplix-logo.png" alt="CarePlix"><span>Studio</span></h1>
-    <p class="lead">Films, decks and storyboards for CarePlix.</p>
+    <p class="lead">Films, decks and storyboards, reviewed before they go out.</p>
     <div id="msg" hidden></div>
-    <a class="signin" id="go" href="/auth/google" aria-label="Sign in with CarePlix">
-      <span>Sign in with</span><img src="/img/careplix-logo.png" alt="">
+    <a class="signin" id="go" href="/auth/google">
+      <span>Sign in with Google</span>
     </a>
-    <div class="who" id="who">For CarePlix accounts only.</div>
+    <div class="who" id="who">Use the Google account your workspace added. Google confirms it’s you.</div>
     <div class="foot">Style frames: Lemo-Opuscar by LemoLab, CC BY 4.0</div>
   </div>
 </main>
@@ -72,15 +71,8 @@
   }
   const q = new URLSearchParams(location.search);
   if (q.get('next')) document.getElementById('go').href = '/auth/google?next=' + encodeURIComponent(q.get('next'));
-  fetch('/auth/info').then(r => r.json()).then(i => {
-    if (i.domains?.length) {
-      const who = document.getElementById('who');
-      who.textContent = '';
-      who.append('Use your ', ...i.domains.flatMap((d, k) => [k ? ' or ' : '', Object.assign(document.createElement('b'), { textContent: '@' + d })]), ' work account. Google confirms it’s you.');
-    }
-  }).catch(() => {});
   const MSG = {
-    domain: 'That Google account isn’t a CarePlix account. Choose your work account and try again.',
+    'not-invited': 'That Google account isn’t in any workspace here. Ask your workspace’s admin to add it, or choose another account.',
     'unverified-email': 'Google hasn’t verified that email address yet.',
     expired: 'The sign-in took too long. Please try again.',
     state: 'The sign-in link expired or was opened in another window. Please try again.',

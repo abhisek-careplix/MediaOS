@@ -1,11 +1,11 @@
 // Attachments for a brief, shared by Create and Productions: product photos (shown in the piece), reference images
 // (Claude reads them, they aren't shown) and notes. state = { media: [], refs: [], notes: '' }; items are { id, url } from /api/uploads.
-import { h, icon, toast } from './core.js';
+import { h, icon, toast, wsHeader } from './core.js';
 
 export async function upload(file) {
   if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error(`${file.name}: use PNG, JPEG or WebP images.`);
   if (file.size > 12e6) throw new Error(`${file.name} is over 12 MB.`);
-  const r = await fetch('/api/uploads', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+  const r = await fetch('/api/uploads', { method: 'POST', headers: { 'Content-Type': file.type, ...wsHeader() }, body: file });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
